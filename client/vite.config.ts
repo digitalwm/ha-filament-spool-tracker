@@ -22,6 +22,7 @@ export default defineConfig(({ mode }) => {
         '@layouts': fileURLToPath(new URL('./src/layouts', import.meta.url)),
         '@utils': fileURLToPath(new URL('./src/utils', import.meta.url)),
         '@styles': fileURLToPath(new URL('./src/styles', import.meta.url)),
+        '@ha-addon/types': fileURLToPath(new URL('../types/index.ts', import.meta.url)),
       }
     },
     server: {

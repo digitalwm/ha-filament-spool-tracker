@@ -5,6 +5,7 @@ server/generated
 .env
 server/dist
 client/dist
+types/dist
 *.d.ts.map
 *.db
 token.txt

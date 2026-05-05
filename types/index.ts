@@ -1,4 +1,10 @@
-export * from './spoolColorStyle';
+export {
+  SPOOL_COLOR_STYLES,
+  SPOOL_COLOR_STYLE_OPTIONS,
+  normalizeSpoolColorStyle,
+  getSpoolColorStyleLabel,
+} from './spoolColorStyle';
+export type { SpoolColorStyle } from './spoolColorStyle';
 
 // ── Data Models ──
 

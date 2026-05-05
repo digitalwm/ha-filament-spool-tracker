@@ -19,6 +19,6 @@
       "@ha-addon/types": ["./types"]
     }
   },
-  "include": ["./**/*.ts", "../types/**/*.ts"],
+  "include": ["./**/*.ts"],
   "exclude": ["../node_modules", "../client", "dist", "**/*.test.ts"]
 }

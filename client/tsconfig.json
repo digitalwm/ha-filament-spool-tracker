@@ -15,6 +15,7 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
+      "@ha-addon/types": ["../types/index.ts"],
       "@components/*": ["src/components/*"],
       "@pages/*": ["src/pages/*"],
       "@modals/*": ["src/modals/*"],
