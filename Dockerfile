@@ -2,12 +2,11 @@
 
 ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:latest
 
-# Official Node image for the same CPU/OS as this build (amd64, arm64, …).
-# Without --platform=$TARGETPLATFORM, `COPY --from=node:…` could pull the builder host’s arch
-# and break on other machines (e.g. amd64 Node inside an arm64 HA image).
-# Default: common local/CI amd64 build. BuildKit/buildx overrides this per `--platform` / multi-arch.
-ARG TARGETPLATFORM=linux/amd64
-FROM --platform=$TARGETPLATFORM node:20-alpine AS node_upstream
+# Node bits must match the image CPU (aarch64, amd64, …). Do NOT pin ARG TARGETPLATFORM to
+# linux/amd64 — Supervisor builds with `--platform linux/arm64` but does not pass TARGETPLATFORM;
+# a wrong default yields amd64 Node on arm64 and `Exec format error` when RUN invokes node.
+# With buildx, `FROM node:…` inherits the request `--platform` for this stage (same as BASE_FROM).
+FROM node:20-alpine AS node_upstream
 
 # ---------------------------------------------------------------------------
 # Shared stack: Home Assistant OS + Node + pnpm — used by builder and runtime.
@@ -20,7 +19,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN apk add --no-cache bash curl && rm -rf /var/cache/apk/*
 
-# Node/npm from official image (pinned major); arch matches TARGETPLATFORM (see node_upstream).
+# Node/npm from official image; stage arch follows `docker buildx build --platform …` (must match HA base).
 COPY --from=node_upstream /usr/local/bin/node /usr/local/bin/node
 COPY --from=node_upstream /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
