@@ -1,5 +1,7 @@
 import type { Spool } from '@ha-addon/types';
 import ProgressBar from './ProgressBar';
+import SpoolColorSwatch from './SpoolColorSwatch';
+import SpoolMetaBadges from './SpoolMetaBadges';
 import './SpoolCard.css';
 
 interface SpoolCardProps {
@@ -13,7 +15,6 @@ interface SpoolCardProps {
 }
 
 export default function SpoolCard({ spool, onEdit, onDeduct, onArchive, onDelete, onActivate, onNameClick }: SpoolCardProps) {
-  const colorDisplay = spool.colorHex || spool.color;
   const isLow = spool.remainingWeight <= 100;
   const isActive = spool.isActive || !!spool.loadedOnPrinter;
 
@@ -28,7 +29,12 @@ export default function SpoolCard({ spool, onEdit, onDeduct, onArchive, onDelete
   return (
     <div className={`spool-card ${isActive ? 'active' : ''} ${isLow ? 'low' : ''}`}>
       <div className="spool-card-header">
-        <div className="spool-color" style={{ backgroundColor: colorDisplay }} />
+        <SpoolColorSwatch
+          className="spool-color"
+          colorHex={spool.colorHex}
+          colorStyle={spool.colorStyle}
+          colorName={spool.color}
+        />
         <div className="spool-info">
           {onNameClick ? (
             <button type="button" className="spool-name spool-name-btn" onClick={() => onNameClick(spool)} title="View prints">
@@ -37,7 +43,7 @@ export default function SpoolCard({ spool, onEdit, onDeduct, onArchive, onDelete
           ) : (
             <h3 className="spool-name">{spool.name}</h3>
           )}
-          <span className="spool-type-badge">{spool.filamentType}</span>
+          <SpoolMetaBadges filamentType={spool.filamentType} colorStyle={spool.colorStyle} />
         </div>
         {archivedAtDisplay ? (
           <span className="spool-archived-badge" title={`Archived ${archivedAtDisplay}`}>

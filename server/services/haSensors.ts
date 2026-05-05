@@ -94,6 +94,7 @@ export async function publishActiveSpoolSensor(): Promise<void> {
         percent_remaining: percent,
         filament_type: spool.filamentType,
         color: spool.colorHex || spool.color,
+        color_style: spool.colorStyle,
       });
       return;
     }
@@ -112,6 +113,7 @@ export async function publishActiveSpoolSensor(): Promise<void> {
       percent_remaining: percent,
       filament_type: spool.filamentType,
       color: spool.colorHex || spool.color,
+      color_style: spool.colorStyle,
     });
   } catch (err) {
     logger.error('Failed to publish active spool sensor:', err);
@@ -152,6 +154,7 @@ export async function publishAvailableSpoolsSensor(): Promise<void> {
         id: s.id,
         name: s.name,
         filament_type: s.filamentType,
+        color_style: s.colorStyle,
         color: s.color,
         color_hex: s.colorHex ?? s.color,
         remaining_g: Math.round(s.remainingWeight ?? 0),

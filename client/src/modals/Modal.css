@@ -157,6 +157,12 @@
   transition: var(--transition-fast);
   padding: 0;
   outline: none;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  position: relative;
 }
 
 .color-swatch:hover {

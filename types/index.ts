@@ -1,3 +1,5 @@
+export * from './spoolColorStyle';
+
 // ── Data Models ──
 
 export interface Printer {
@@ -23,6 +25,8 @@ export interface Spool {
   id: string;
   name: string;
   filamentType: string;
+  /** How the color swatch is drawn in the UI (solid, wood grain, multicolor ring, etc.). */
+  colorStyle: string;
   color: string;
   colorHex: string | null;
   manufacturer: string | null;
@@ -68,6 +72,7 @@ export type FilamentType = 'PLA' | 'PETG' | 'TPU' | 'ABS' | 'ASA' | 'Nylon' | 'P
 export interface SpoolCreateRequest {
   name: string;
   filamentType: string;
+  colorStyle?: string;
   color: string;
   colorHex?: string;
   manufacturer?: string;
@@ -127,6 +132,10 @@ export interface PrintJobUpdateRequest {
   skipFilamentDeduction?: boolean;
   /** When leaving `completed`: set true to add `filamentUsed` back to the linked spool (undo deduction). */
   restoreFilament?: boolean;
+  /** When changing `spoolId` on an already-completed job: add `filamentUsed` back to the previously linked spool. */
+  recoverFilamentFromPreviousSpool?: boolean;
+  /** When changing `spoolId` on an already-completed job: subtract `filamentUsed` from the newly linked spool. */
+  deductFilamentFromNewSpool?: boolean;
 }
 
 export interface SettingsUpdateRequest {
@@ -148,7 +157,7 @@ export interface DashboardStats {
   /** Printers with activeSpool for dashboard "loaded spool" quick update */
   printersList: Printer[];
   /** Non-archived spools for loaded-spool dropdowns */
-  spoolsList: Pick<Spool, 'id' | 'name' | 'filamentType' | 'color' | 'colorHex' | 'remainingWeight'>[];
+  spoolsList: Pick<Spool, 'id' | 'name' | 'filamentType' | 'colorStyle' | 'color' | 'colorHex' | 'remainingWeight'>[];
   /** In-progress jobs (for dashboard); includes printer and spool when linked */
   activeInProgressPrintJobs: PrintJob[];
   /** Live HA strings keyed by `printerId` (ETA / current print weight) */

@@ -44,6 +44,7 @@ model Spool {
   id              String    @id @default(uuid())
   name            String
   filamentType    String    @map("filament_type")
+  colorStyle      String    @default("solid") @map("color_style")
   color           String
   colorHex        String?   @map("color_hex")
   manufacturer    String?

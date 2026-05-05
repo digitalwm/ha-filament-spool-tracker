@@ -1,6 +1,7 @@
 .spool-select {
   position: relative;
   width: 100%;
+  min-width: min(320px, 100%);
 }
 
 .spool-select-trigger {
@@ -79,7 +80,10 @@
   position: absolute;
   top: 100%;
   left: 0;
-  right: 0;
+  right: auto;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(520px, calc(100vw - 24px));
   margin: 4px 0 0;
   padding: 4px 0;
   list-style: none;
@@ -89,6 +93,7 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   max-height: 240px;
   overflow-y: auto;
+  overflow-x: hidden;
   z-index: 100;
 }
 
@@ -111,11 +116,9 @@
 }
 
 .spool-select-option-label {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 auto;
+  min-width: max-content;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .spool-select-option-weight {

@@ -5,6 +5,8 @@ import type { DashboardStats, Printer, PrintJob } from '@ha-addon/types';
 import PrintJobCard from '@components/PrintJobCard';
 import DashboardPrinterJobCard from '@components/DashboardPrinterJobCard';
 import ProgressBar from '@components/ProgressBar';
+import SpoolColorSwatch from '@components/SpoolColorSwatch';
+import SpoolMetaBadges from '@components/SpoolMetaBadges';
 import SpoolSelect from '@components/SpoolSelect';
 import './index.css';
 
@@ -149,10 +151,18 @@ export default function DashboardPage() {
                     renderTrigger={() => (printer.activeSpool ? (
                       <div className="active-spool-trigger-content">
                         <div className="active-spool-header">
-                          <span className="active-spool-dot" style={{ backgroundColor: printer.activeSpool.colorHex || printer.activeSpool.color }} />
+                          <SpoolColorSwatch
+                            className="active-spool-dot"
+                            colorHex={printer.activeSpool.colorHex}
+                            colorStyle={printer.activeSpool.colorStyle}
+                            colorName={printer.activeSpool.color}
+                          />
                           <div className="active-spool-info">
                             <span className="active-spool-name">{printer.activeSpool.name}</span>
-                            <span className="active-spool-type">{printer.activeSpool.filamentType}</span>
+                            <SpoolMetaBadges
+                              filamentType={printer.activeSpool.filamentType}
+                              colorStyle={printer.activeSpool.colorStyle}
+                            />
                           </div>
                           <a
                             href={`/spools/${printer.activeSpool.id}`}
@@ -200,7 +210,12 @@ export default function DashboardPage() {
                 onClick={() => navigate(`/spools/${spool.id}`)}
               >
                 <div className="low-filament-info">
-                  <span className="spool-dot-inline" style={{ backgroundColor: spool.colorHex || spool.color }} />
+                  <SpoolColorSwatch
+                    className="spool-dot-inline"
+                    colorHex={spool.colorHex}
+                    colorStyle={spool.colorStyle}
+                    colorName={spool.color}
+                  />
                   <span className="low-filament-name">{spool.name}</span>
                   <span className="low-filament-type">{spool.filamentType}</span>
                 </div>

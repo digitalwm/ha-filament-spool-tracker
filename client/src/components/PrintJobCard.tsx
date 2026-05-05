@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
-import type { PrintJob, PrintJobStatus } from '@ha-addon/types';
+import type { PrintJob, PrintJobStatus, Spool } from '@ha-addon/types';
 import { getApiBaseURL } from '../services/api';
 import StatusBadge from './StatusBadge';
+import SpoolColorSwatch from './SpoolColorSwatch';
+import SpoolSelect from './SpoolSelect';
 import './PrintJobCard.css';
 
 const STATUS_SELECT_OPTIONS: { value: PrintJobStatus; label: string }[] = [
@@ -21,13 +23,24 @@ function projectImageSrc(projectImage: string | null): string | undefined {
 interface PrintJobCardProps {
   job: PrintJob;
   onAssignSpool?: (job: PrintJob) => void;
+  /** When set with `spoolsForReassign`, show a spool dropdown (e.g. Print History) to change the linked spool. */
+  onSpoolChange?: (job: PrintJob, newSpoolId: string | null) => void;
+  spoolsForReassign?: Spool[];
   onDelete?: (job: PrintJob) => void;
   onComplete?: (job: PrintJob) => void;
   /** When set, status is editable via a dropdown (e.g. Print History). */
   onStatusChange?: (job: PrintJob, nextStatus: PrintJobStatus) => void;
 }
 
-export default function PrintJobCard({ job, onAssignSpool, onDelete, onComplete, onStatusChange }: PrintJobCardProps) {
+export default function PrintJobCard({
+  job,
+  onAssignSpool,
+  onSpoolChange,
+  spoolsForReassign,
+  onDelete,
+  onComplete,
+  onStatusChange,
+}: PrintJobCardProps) {
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString(undefined, {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -88,9 +101,27 @@ export default function PrintJobCard({ job, onAssignSpool, onDelete, onComplete,
         </div>
         <div className="print-job-meta">
           {job.printer && <span className="meta-item">Printer: {job.printer.name}</span>}
-          {job.spool ? (
+          {job.spool && onSpoolChange && spoolsForReassign && spoolsForReassign.length > 0 ? (
+            <span className="meta-item print-job-spool-reassign">
+              <div className="print-job-spool-select-wrap">
+                <SpoolSelect
+                  value={job.spool.id}
+                  onChange={(id) => onSpoolChange(job, id)}
+                  spools={spoolsForReassign}
+                  placeholder="No spool"
+                  size="sm"
+                  aria-label="Change linked spool"
+                />
+              </div>
+            </span>
+          ) : job.spool ? (
             <span className="meta-item">
-              <span className="spool-dot" style={{ backgroundColor: job.spool.colorHex || job.spool.color }} />
+              <SpoolColorSwatch
+                className="spool-dot"
+                colorHex={job.spool.colorHex}
+                colorStyle={job.spool.colorStyle}
+                colorName={job.spool.color}
+              />
               <Link to={`/spools/${job.spool.id}`} className="print-job-spool-link">
                 {job.spool.name}
               </Link>

@@ -45,7 +45,15 @@ router.get('/dashboard/stats', async (_req: Request, res: Response) => {
         }),
         prisma.spool.findMany({
           where: { archivedAt: null },
-          select: { id: true, name: true, filamentType: true, color: true, colorHex: true, remainingWeight: true },
+          select: {
+            id: true,
+            name: true,
+            filamentType: true,
+            colorStyle: true,
+            color: true,
+            colorHex: true,
+            remainingWeight: true,
+          },
           orderBy: { name: 'asc' },
         }),
         prisma.printJob.findMany({

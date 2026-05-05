@@ -210,6 +210,34 @@ router.put('/print-jobs/:id', async (req: Request, res: Response) => {
       }
     }
 
+    const gUsed = existing.filamentUsed != null && existing.filamentUsed > 0 ? existing.filamentUsed : 0;
+    const spoolIdChanged =
+      body.spoolId !== undefined &&
+      String(existing.spoolId ?? '') !== String(job.spoolId ?? '');
+    const completedSpoolReassigned =
+      existing.status === 'completed' && gUsed > 0 && spoolIdChanged;
+
+    if (completedSpoolReassigned) {
+      if (body.recoverFilamentFromPreviousSpool === true && existing.spoolId) {
+        const prev = await prisma.spool.findUnique({ where: { id: existing.spoolId } });
+        if (prev) {
+          await prisma.spool.update({
+            where: { id: existing.spoolId },
+            data: { remainingWeight: prev.remainingWeight + gUsed },
+          });
+        }
+      }
+      if (body.deductFilamentFromNewSpool === true && job.spoolId && job.spoolId !== existing.spoolId) {
+        const nextSpool = await prisma.spool.findUnique({ where: { id: job.spoolId } });
+        if (nextSpool) {
+          await prisma.spool.update({
+            where: { id: job.spoolId },
+            data: { remainingWeight: Math.max(0, nextSpool.remainingWeight - gUsed) },
+          });
+        }
+      }
+    }
+
     res.json(job);
   } catch (error) {
     logger.error('Failed to update print job:', error);

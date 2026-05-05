@@ -2,7 +2,9 @@ import { Router, Request, Response } from 'express';
 import { getPrismaClient } from '../database';
 import { LOG } from '../utils/logger';
 import type { SpoolCreateRequest, SpoolUpdateRequest, DeductionRequest } from '@ha-addon/types';
+import { normalizeSpoolColorStyle } from '@ha-addon/types';
 import { publishAllSpooltrackerHASensors } from '../services/haSensors';
+import { assignActiveSpoolToPrinter, AssignSpoolError } from '../services/assignActiveSpool';
 
 const logger = LOG('SPOOLS');
 const router: Router = Router();
@@ -75,6 +77,7 @@ router.post('/spools', async (req: Request, res: Response) => {
       data: {
         name: body.name,
         filamentType: body.filamentType,
+        colorStyle: normalizeSpoolColorStyle(body.colorStyle),
         color: body.color,
         colorHex: body.colorHex,
         manufacturer: body.manufacturer,
@@ -87,6 +90,7 @@ router.post('/spools', async (req: Request, res: Response) => {
         notes: body.notes,
       },
     });
+    await publishAllSpooltrackerHASensors();
     res.status(201).json(spool);
   } catch (error) {
     logger.error('Failed to create spool:', error);
@@ -104,6 +108,7 @@ router.put('/spools/:id', async (req: Request, res: Response) => {
 
     if (body.name !== undefined) data.name = body.name;
     if (body.filamentType !== undefined) data.filamentType = body.filamentType;
+    if (body.colorStyle !== undefined) data.colorStyle = normalizeSpoolColorStyle(body.colorStyle);
     if (body.color !== undefined) data.color = body.color;
     if (body.colorHex !== undefined) data.colorHex = body.colorHex;
     if (body.manufacturer !== undefined) data.manufacturer = body.manufacturer;
@@ -188,13 +193,40 @@ router.post('/spools/:id/activate', async (req: Request, res: Response) => {
   const prisma = getPrismaClient();
   if (!prisma) return res.status(503).json({ error: 'Database not available' });
 
+  const spoolId = req.params.id as string;
+  const body = (req.body ?? {}) as { printerId?: string };
+  const printerId =
+    typeof body.printerId === 'string' && body.printerId.trim().length > 0 ? body.printerId.trim() : undefined;
+
   try {
     const spool = await prisma.spool.update({
-      where: { id: req.params.id as string },
+      where: { id: spoolId },
       data: { isActive: true, archivedAt: null },
     });
+
+    if (printerId) {
+      try {
+        await assignActiveSpoolToPrinter(prisma, printerId, spool.id);
+      } catch (err) {
+        if (err instanceof AssignSpoolError) {
+          return res.status(err.statusCode).json({ error: err.message });
+        }
+        throw err;
+      }
+    }
+
+    const printersWithSpool = await prisma.printer.findMany({
+      where: { activeSpoolId: spool.id },
+      select: { id: true, name: true, activeSpoolId: true },
+    });
+    const loaded = printersWithSpool[0];
+    const payload = {
+      ...spool,
+      loadedOnPrinter: loaded ? { id: loaded.id, name: loaded.name } : null,
+    };
+
     await publishAllSpooltrackerHASensors();
-    res.json(spool);
+    res.json(payload);
   } catch (error) {
     logger.error('Failed to activate spool:', error);
     res.status(500).json({ error: 'Failed to activate spool' });

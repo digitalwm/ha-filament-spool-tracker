@@ -6,6 +6,7 @@ import EditPrinterModal, { type EditPrinterSaveData } from '@modals/EditPrinterM
 import AddPrinterModal from '@modals/AddPrinterModal';
 import ConfirmModal from '@modals/ConfirmModal';
 import ProgressBar from '@components/ProgressBar';
+import SpoolColorSwatch from '@components/SpoolColorSwatch';
 import SpoolSelect from '@components/SpoolSelect';
 import './index.css';
 
@@ -221,7 +222,12 @@ export default function PrintersPage() {
                         className="printer-card-spool-preview"
                         onClick={() => navigate(`/spools/${printer.activeSpool!.id}`)}
                       >
-                        <span className="printer-card-spool-dot" style={{ backgroundColor: printer.activeSpool.colorHex || printer.activeSpool.color }} />
+                        <SpoolColorSwatch
+                          className="printer-card-spool-dot"
+                          colorHex={printer.activeSpool.colorHex}
+                          colorStyle={printer.activeSpool.colorStyle}
+                          colorName={printer.activeSpool.color}
+                        />
                         <span className="printer-card-spool-name">{printer.activeSpool.name}</span>
                         <span className="printer-card-spool-weight">
                           {Math.round(printer.activeSpool.remainingWeight)}g / {Math.round(printer.activeSpool.initialWeight)}g

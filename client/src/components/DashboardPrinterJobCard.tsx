@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import type { PrintJob } from '@ha-addon/types';
 import { getApiBaseURL } from '../services/api';
 import ProgressBar from './ProgressBar';
+import SpoolColorSwatch from './SpoolColorSwatch';
 import './PrintJobCard.css';
 import './DashboardPrinterJobCard.css';
 
@@ -163,10 +164,11 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
           )}
           {job.spool ? (
             <span className="meta-item">
-              <span
+              <SpoolColorSwatch
                 className="spool-dot"
-                style={{ backgroundColor: job.spool.colorHex || job.spool.color }}
-                aria-hidden
+                colorHex={job.spool.colorHex}
+                colorStyle={job.spool.colorStyle}
+                colorName={job.spool.color}
               />
               <Link
                 to={`/spools/${job.spool.id}`}

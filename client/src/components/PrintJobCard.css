@@ -147,6 +147,19 @@
   border: 1px solid var(--border-color);
 }
 
+.print-job-spool-reassign {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.print-job-spool-select-wrap {
+  min-width: min(320px, 100%);
+  max-width: min(520px, 100%);
+  flex: 1 1 auto;
+}
+
 .print-job-spool-link {
   color: inherit;
   text-decoration: none;

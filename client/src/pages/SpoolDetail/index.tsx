@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { spoolsApi, printJobsApi } from '@services/api';
 import type { Spool, PrintJob, SpoolCreateRequest } from '@ha-addon/types';
 import PrintJobCard from '@components/PrintJobCard';
+import SpoolColorSwatch from '@components/SpoolColorSwatch';
+import SpoolMetaBadges from '@components/SpoolMetaBadges';
 import ProgressBar from '@components/ProgressBar';
 import AddEditSpoolModal from '@modals/AddEditSpoolModal';
 import DeductFilamentModal from '@modals/DeductFilamentModal';
@@ -96,8 +98,6 @@ export default function SpoolDetailPage() {
     }
   };
 
-  const colorDisplay = spool.colorHex || spool.color;
-
   return (
     <div className="spool-detail-page">
       <nav className="spool-detail-breadcrumb">
@@ -107,10 +107,18 @@ export default function SpoolDetailPage() {
       </nav>
 
       <div className="spool-detail-header">
-        <span className="spool-detail-dot" style={{ backgroundColor: colorDisplay }} />
+        <SpoolColorSwatch
+          className="spool-detail-dot"
+          colorHex={spool.colorHex}
+          colorStyle={spool.colorStyle}
+          colorName={spool.color}
+        />
         <div className="spool-detail-info">
           <h1 className="spool-detail-name">{spool.name}</h1>
-          <span className="spool-detail-meta">{spool.filamentType} · {Math.round(spool.remainingWeight)}g / {Math.round(spool.initialWeight)}g</span>
+          <SpoolMetaBadges filamentType={spool.filamentType} colorStyle={spool.colorStyle} />
+          <span className="spool-detail-meta">
+            {Math.round(spool.remainingWeight)}g / {Math.round(spool.initialWeight)}g
+          </span>
         </div>
         <div className="spool-detail-actions">
           <button className="btn btn-secondary btn-sm" onClick={() => setShowDeductModal(true)}>

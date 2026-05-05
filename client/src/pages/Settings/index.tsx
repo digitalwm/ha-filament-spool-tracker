@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { settingsApi, haApi } from '@services/api';
 import type { HAConnectionStatus } from '@ha-addon/types';
+import { DEFAULT_NEW_SPOOL_WEIGHT_GRAMS, parseDefaultNewSpoolWeightGrams } from '@utils/defaultNewSpoolWeight';
 import './index.css';
 
 export default function SettingsPage() {
@@ -9,6 +10,7 @@ export default function SettingsPage() {
   const [lowThreshold, setLowThreshold] = useState('100');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [filamentChangeNotificationsEnabled, setFilamentChangeNotificationsEnabled] = useState(true);
+  const [defaultNewSpoolWeight, setDefaultNewSpoolWeight] = useState(String(DEFAULT_NEW_SPOOL_WEIGHT_GRAMS));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -30,6 +32,9 @@ export default function SettingsPage() {
             settingsRes.data['filament_change_notifications_enabled'] !== '0',
           );
         }
+        setDefaultNewSpoolWeight(
+          String(parseDefaultNewSpoolWeightGrams(settingsRes.data['default_new_spool_weight_grams'])),
+        );
       } catch (err) {
         console.error('Failed to load settings:', err);
       }
@@ -44,6 +49,7 @@ export default function SettingsPage() {
         low_filament_threshold: lowThreshold,
         notifications_enabled: notificationsEnabled ? 'true' : 'false',
         filament_change_notifications_enabled: filamentChangeNotificationsEnabled ? 'true' : 'false',
+        default_new_spool_weight_grams: String(parseDefaultNewSpoolWeightGrams(defaultNewSpoolWeight)),
       });
       setSettings(res.data);
     } catch (err) {
@@ -86,6 +92,21 @@ export default function SettingsPage() {
             <p className="form-hint">
               When enabled, a notification is sent when the Bambu integration suggests filament was changed on a printer.
             </p>
+          </div>
+          <div className="form-group">
+            <label>Default weight for new spools (grams)</label>
+            <input
+              type="number"
+              value={defaultNewSpoolWeight}
+              onChange={(e) => setDefaultNewSpoolWeight(e.target.value)}
+              min="1"
+              max="1000000"
+              style={{ maxWidth: 200 }}
+            />
+            <span className="form-hint">
+              Pre-fills initial and remaining weight when you add a spool. Currently:{' '}
+              {parseDefaultNewSpoolWeightGrams(settings['default_new_spool_weight_grams'])}g
+            </span>
           </div>
         </div>
       </div>

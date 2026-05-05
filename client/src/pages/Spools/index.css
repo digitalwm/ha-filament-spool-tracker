@@ -25,7 +25,45 @@
 
 .spools-filters {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.spools-filters-presets {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--spacing-xs);
+}
+
+.spools-filter-style {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.spools-filter-style label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.spools-filter-style-select {
+  min-width: 11rem;
+  max-width: 100%;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: 13px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.spools-filter-style-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
 }
 
 .spools-grid {

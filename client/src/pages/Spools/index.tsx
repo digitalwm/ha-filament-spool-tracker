@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { spoolsApi } from '@services/api';
-import type { Spool, SpoolCreateRequest } from '@ha-addon/types';
+import { spoolsApi, settingsApi, printersApi } from '@services/api';
+import { DEFAULT_NEW_SPOOL_WEIGHT_GRAMS, parseDefaultNewSpoolWeightGrams } from '@utils/defaultNewSpoolWeight';
+import type { Spool, SpoolColorStyle, SpoolCreateRequest, Printer } from '@ha-addon/types';
+import { normalizeSpoolColorStyle, SPOOL_COLOR_STYLE_OPTIONS } from '@ha-addon/types';
 import SpoolCard from '@components/SpoolCard';
 import AddEditSpoolModal from '@modals/AddEditSpoolModal';
+import ActivateSpoolPrinterModal from '@modals/ActivateSpoolPrinterModal';
 import DeductFilamentModal from '@modals/DeductFilamentModal';
 import ConfirmModal from '@modals/ConfirmModal';
 import './index.css';
@@ -15,6 +18,7 @@ const LOW_FILAMENT_THRESHOLD = 100; // grams — keep in sync with server/dashbo
 export default function SpoolsPage() {
   const [spools, setSpools] = useState<Spool[]>([]);
   const [filter, setFilter] = useState<SpoolFilter>('all');
+  const [styleFilter, setStyleFilter] = useState<'all' | SpoolColorStyle>('all');
   const [loading, setLoading] = useState(true);
 
   const navigate = useNavigate();
@@ -23,6 +27,17 @@ export default function SpoolsPage() {
   const [editingSpool, setEditingSpool] = useState<Spool | null>(null);
   const [deductingSpool, setDeductingSpool] = useState<Spool | null>(null);
   const [deletingSpool, setDeletingSpool] = useState<Spool | null>(null);
+  const [activatePrinterModal, setActivatePrinterModal] = useState<{ spool: Spool; printers: Printer[] } | null>(null);
+  const [defaultNewSpoolWeightGrams, setDefaultNewSpoolWeightGrams] = useState(DEFAULT_NEW_SPOOL_WEIGHT_GRAMS);
+
+  useEffect(() => {
+    let cancelled = false;
+    void settingsApi.getAll().then((res) => {
+      if (cancelled) return;
+      setDefaultNewSpoolWeightGrams(parseDefaultNewSpoolWeightGrams(res.data['default_new_spool_weight_grams']));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const fetchSpools = useCallback(async () => {
     try {
@@ -55,6 +70,11 @@ export default function SpoolsPage() {
       setFilter(value);
     }
   }, [location.search]);
+
+  const visibleSpools = useMemo(() => {
+    if (styleFilter === 'all') return spools;
+    return spools.filter((s) => normalizeSpoolColorStyle(s.colorStyle) === styleFilter);
+  }, [spools, styleFilter]);
 
   const handleSave = async (data: SpoolCreateRequest) => {
     try {
@@ -104,7 +124,28 @@ export default function SpoolsPage() {
 
   const handleActivate = async (spool: Spool) => {
     try {
-      await spoolsApi.activate(spool.id);
+      const printersRes = await printersApi.getAll();
+      const printers = printersRes.data.filter((p) => p.isActive);
+      if (printers.length === 0) {
+        await spoolsApi.activate(spool.id);
+      } else if (printers.length === 1) {
+        await spoolsApi.activate(spool.id, { printerId: printers[0].id });
+      } else {
+        setActivatePrinterModal({ spool, printers });
+        return;
+      }
+      fetchSpools();
+    } catch (err) {
+      console.error('Failed to activate spool:', err);
+    }
+  };
+
+  const finishActivateWithPrinter = async (printerId: string | null) => {
+    if (!activatePrinterModal) return;
+    const { spool } = activatePrinterModal;
+    try {
+      await spoolsApi.activate(spool.id, printerId ? { printerId } : {});
+      setActivatePrinterModal(null);
       fetchSpools();
     } catch (err) {
       console.error('Failed to activate spool:', err);
@@ -124,15 +165,35 @@ export default function SpoolsPage() {
       </div>
 
       <div className="spools-filters">
-        {(['all', 'active', 'archived', 'low'] as SpoolFilter[]).map((f) => (
-          <button
-            key={f}
-            className={`btn ${filter === f ? 'btn-primary' : 'btn-secondary'} btn-sm`}
-            onClick={() => setFilter(f)}
+        <div className="spools-filters-presets">
+          {(['all', 'active', 'archived', 'low'] as SpoolFilter[]).map((f) => (
+            <button
+              key={f}
+              type="button"
+              className={`btn ${filter === f ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+              onClick={() => setFilter(f)}
+            >
+              {f === 'low' ? 'Low' : f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div className="spools-filter-style">
+          <label htmlFor="spools-style-filter">Style</label>
+          <select
+            id="spools-style-filter"
+            className="spools-filter-style-select"
+            value={styleFilter}
+            onChange={(e) => {
+              const v = e.target.value;
+              setStyleFilter(v === 'all' ? 'all' : normalizeSpoolColorStyle(v));
+            }}
           >
-            {f === 'low' ? 'Low' : f.charAt(0).toUpperCase() + f.slice(1)}
-          </button>
-        ))}
+            <option value="all">All styles</option>
+            {SPOOL_COLOR_STYLE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {loading ? (
@@ -143,9 +204,17 @@ export default function SpoolsPage() {
           <p>Add your first filament spool to start tracking usage.</p>
           <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>+ Add Your First Spool</button>
         </div>
+      ) : visibleSpools.length === 0 ? (
+        <div className="empty-state">
+          <h3>No matching spools</h3>
+          <p>No spools use the selected swatch style with the current status filter.</p>
+          <button type="button" className="btn btn-primary" onClick={() => setStyleFilter('all')}>
+            Clear style filter
+          </button>
+        </div>
       ) : (
         <div className="spools-grid">
-          {spools.map((spool) => (
+          {visibleSpools.map((spool) => (
             <SpoolCard
               key={spool.id}
               spool={spool}
@@ -160,9 +229,19 @@ export default function SpoolsPage() {
         </div>
       )}
 
+      {activatePrinterModal && (
+        <ActivateSpoolPrinterModal
+          spool={activatePrinterModal.spool}
+          printers={activatePrinterModal.printers}
+          onConfirm={(printerId) => void finishActivateWithPrinter(printerId)}
+          onCancel={() => setActivatePrinterModal(null)}
+        />
+      )}
+
       {(showAddModal || editingSpool) && (
         <AddEditSpoolModal
           spool={editingSpool}
+          defaultWeightGrams={defaultNewSpoolWeightGrams}
           onSave={handleSave}
           onCancel={() => { setShowAddModal(false); setEditingSpool(null); }}
         />

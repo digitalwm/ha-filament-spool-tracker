@@ -6,6 +6,7 @@ import PrintJobCard from '@components/PrintJobCard';
 import AddPrintJobModal from '@modals/AddPrintJobModal';
 import ConfirmModal from '@modals/ConfirmModal';
 import PrintJobStatusConfirmModal, { type StatusChangeApplyOptions } from '@modals/PrintJobStatusConfirmModal';
+import PrintJobSpoolChangeConfirmModal, { type SpoolChangeApplyOptions } from '@modals/PrintJobSpoolChangeConfirmModal';
 import './index.css';
 
 const PAGE_SIZE = 20;
@@ -24,6 +25,11 @@ export default function PrintHistoryPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [deletingJob, setDeletingJob] = useState<PrintJob | null>(null);
   const [statusChangeDraft, setStatusChangeDraft] = useState<{ job: PrintJob; nextStatus: PrintJobStatus } | null>(null);
+  const [printJobSpoolChangeDraft, setPrintJobSpoolChangeDraft] = useState<{
+    job: PrintJob;
+    newSpoolId: string | null;
+    newSpoolLabel: string;
+  } | null>(null);
 
   // Initialize status filter from query string (e.g. /history?status=in_progress)
   useEffect(() => {
@@ -160,6 +166,45 @@ export default function PrintHistoryPage() {
     }
   };
 
+  const handleSpoolChangeRequest = (job: PrintJob, newSpoolId: string | null) => {
+    const currentId = job.spoolId ?? job.spool?.id ?? null;
+    if (String(currentId ?? '') === String(newSpoolId ?? '')) return;
+    const g = job.filamentUsed != null && job.filamentUsed > 0;
+    if (job.status === 'completed' && g) {
+      const newSpoolLabel =
+        newSpoolId == null
+          ? 'No spool'
+          : (spools.find((s) => s.id === newSpoolId)?.name ?? 'Selected spool');
+      setPrintJobSpoolChangeDraft({ job, newSpoolId, newSpoolLabel });
+      return;
+    }
+    void (async () => {
+      try {
+        await printJobsApi.update(job.id, { spoolId: newSpoolId });
+        await reloadFirstPage();
+      } catch (err) {
+        console.error('Failed to update print job spool:', err);
+      }
+    })();
+  };
+
+  const applyPrintJobSpoolChange = async (options: SpoolChangeApplyOptions) => {
+    if (!printJobSpoolChangeDraft) return;
+    const { job, newSpoolId } = printJobSpoolChangeDraft;
+    try {
+      await printJobsApi.update(job.id, {
+        spoolId: newSpoolId,
+        recoverFilamentFromPreviousSpool: options.recoverFilamentFromPreviousSpool,
+        deductFilamentFromNewSpool: options.deductFilamentFromNewSpool,
+      });
+      setPrintJobSpoolChangeDraft(null);
+      await reloadFirstPage();
+      spoolsApi.getAll().then((r) => setSpools(r.data)).catch(() => {});
+    } catch (err) {
+      console.error('Failed to change print job spool:', err);
+    }
+  };
+
   const statuses = ['', 'in_progress', 'completed', 'failed', 'cancelled'];
   const statusLabels: Record<string, string> = {
     '': 'All',
@@ -208,6 +253,8 @@ export default function PrintHistoryPage() {
                 key={job.id}
                 job={job}
                 onAssignSpool={(j) => { setAssigningJob(j); setSelectedSpoolId(''); }}
+                spoolsForReassign={spools.filter((s) => s.archivedAt === null)}
+                onSpoolChange={handleSpoolChangeRequest}
                 onStatusChange={handleStatusChangeRequest}
                 onDelete={(j) => setDeletingJob(j)}
               />
@@ -281,6 +328,16 @@ export default function PrintHistoryPage() {
           nextStatus={statusChangeDraft.nextStatus}
           onCancel={() => setStatusChangeDraft(null)}
           onApply={applyStatusChange}
+        />
+      )}
+
+      {printJobSpoolChangeDraft && (
+        <PrintJobSpoolChangeConfirmModal
+          job={printJobSpoolChangeDraft.job}
+          newSpoolId={printJobSpoolChangeDraft.newSpoolId}
+          newSpoolLabel={printJobSpoolChangeDraft.newSpoolLabel}
+          onCancel={() => setPrintJobSpoolChangeDraft(null)}
+          onApply={applyPrintJobSpoolChange}
         />
       )}
     </div>

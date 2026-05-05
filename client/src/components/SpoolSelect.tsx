@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import { getSpoolColorStyleLabel, normalizeSpoolColorStyle } from '@ha-addon/types';
+import SpoolColorSwatch from './SpoolColorSwatch';
 import './SpoolSelect.css';
 
 /** Minimal spool shape for dropdown options (dashboard spoolsList is a subset of Spool). */
@@ -6,6 +8,7 @@ export interface SpoolOption {
   id: string;
   name: string;
   filamentType: string;
+  colorStyle?: string | null;
   color?: string | null;
   colorHex?: string | null;
   /** Remaining filament (g); shown in dropdown and default trigger to disambiguate similar spools */
@@ -25,13 +28,22 @@ interface SpoolSelectProps {
   className?: string;
 }
 
-function getSpoolColor(spool: SpoolOption): string {
-  return spool.colorHex || spool.color || 'var(--text-muted)';
-}
-
 function formatRemaining(weight: number | undefined): string | null {
   if (weight == null || Number.isNaN(weight)) return null;
   return `${Math.round(weight)}g`;
+}
+
+/** `PLA/Light Blue` or `PETG/Wood-filled` (finish from colorStyle, fallback to color). Shared with dashboard active-spool line. */
+export function formatSpoolMaterialStyleSegment(spool: SpoolOption): string {
+  const material = spool.filamentType?.trim() || '?';
+  const colorName = spool.color?.trim();
+  const styleLabel = getSpoolColorStyleLabel(spool.colorStyle);
+  const normalized = normalizeSpoolColorStyle(spool.colorStyle);
+  const style =
+    normalized === 'solid'
+      ? colorName || styleLabel
+      : styleLabel || colorName || '?';
+  return `${material}/${style}`;
 }
 
 export default function SpoolSelect({
@@ -89,12 +101,14 @@ export default function SpoolSelect({
           <>
             {selectedSpool ? (
               <>
-                <span
+                <SpoolColorSwatch
                   className="spool-select-dot"
-                  style={{ backgroundColor: getSpoolColor(selectedSpool) }}
+                  colorHex={selectedSpool.colorHex}
+                  colorStyle={selectedSpool.colorStyle}
+                  colorName={selectedSpool.color}
                 />
                 <span className="spool-select-label">
-                  {selectedSpool.name} ({selectedSpool.filamentType})
+                  {selectedSpool.name} ({formatSpoolMaterialStyleSegment(selectedSpool)})
                   {selectedRemainingLabel && (
                     <span className="spool-select-label-weight"> · {selectedRemainingLabel}</span>
                   )}
@@ -137,12 +151,14 @@ export default function SpoolSelect({
                   setOpen(false);
                 }}
               >
-                <span
+                <SpoolColorSwatch
                   className="spool-select-dot"
-                  style={{ backgroundColor: getSpoolColor(spool) }}
+                  colorHex={spool.colorHex}
+                  colorStyle={spool.colorStyle}
+                  colorName={spool.color}
                 />
                 <span className="spool-select-option-label">
-                  {spool.name} ({spool.filamentType})
+                  {spool.name} ({formatSpoolMaterialStyleSegment(spool)})
                 </span>
                 {remainingLabel && (
                   <span className="spool-select-option-weight">{remainingLabel}</span>

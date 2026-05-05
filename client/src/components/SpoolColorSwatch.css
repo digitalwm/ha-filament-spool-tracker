@@ -1,0 +1,262 @@
+.spool-swatch {
+  display: inline-block;
+  box-sizing: border-box;
+  vertical-align: middle;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+  background: var(--swatch-fill, #6e7681);
+  overflow: visible;
+  position: relative;
+}
+
+/* Card header */
+.spool-color.spool-swatch {
+  width: 32px;
+  height: 32px;
+  border-width: 2px;
+}
+
+/* Spool detail header */
+.spool-detail-dot.spool-swatch {
+  width: 48px;
+  height: 48px;
+  border-width: 3px;
+}
+
+/* Dashboard active printer */
+.active-spool-dot.spool-swatch {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
+}
+
+/* Low-filament inline */
+.spool-dot-inline.spool-swatch {
+  width: 12px;
+  height: 12px;
+}
+
+/* Print job / dashboard job meta */
+.spool-dot.spool-swatch {
+  width: 10px;
+  height: 10px;
+}
+
+/* Printer cards */
+.printer-card-spool-dot.spool-swatch {
+  width: 10px;
+  height: 10px;
+}
+
+/* Dropdown */
+.spool-select-dot.spool-swatch {
+  width: 10px;
+  height: 10px;
+  border: none;
+}
+
+/* Modal color picker: fill button */
+.color-swatch .spool-swatch {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 50%;
+  display: block;
+}
+
+/* Solid: clean fill with strong silk-like sheen (diagonal highlight) */
+.spool-swatch--solid {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--swatch-fill) 82%, #ffffff) 0%,
+    var(--swatch-fill) 42%,
+    color-mix(in srgb, var(--swatch-fill) 65%, #000000) 100%
+  );
+}
+
+@supports not (background: color-mix(in srgb, red 50%, blue)) {
+  .spool-swatch--solid {
+    background: linear-gradient(135deg, #f0f0f0 0%, var(--swatch-fill) 45%, #1a1a1a 100%);
+  }
+}
+
+/* Matte: micro-grain + muted diffuse finish (no glossy hotspot) */
+.spool-swatch--matte {
+  background-color: var(--swatch-fill);
+  background-image:
+    radial-gradient(rgba(0, 0, 0, 0.14) 0.3px, transparent 0.55px),
+    linear-gradient(195deg, rgba(255, 255, 255, 0.03) 0%, transparent 40%, rgba(0, 0, 0, 0.14) 100%);
+  background-size: 2.25px 2.25px, auto;
+  filter: saturate(0.68) brightness(0.88) contrast(1.04);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+/* Translucent: milky core + bright rim (gel); avoids whole-dot opacity */
+.spool-swatch--translucent {
+  background-color: var(--swatch-fill);
+  background-image: radial-gradient(
+    circle at 50% 55%,
+    color-mix(in srgb, var(--swatch-fill) 22%, rgba(255, 255, 255, 0.92)) 0%,
+    color-mix(in srgb, var(--swatch-fill) 58%, rgba(255, 255, 255, 0.38)) 46%,
+    var(--swatch-fill) 78%
+  );
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.55),
+    inset 0 3px 14px rgba(255, 255, 255, 0.45),
+    inset 0 -8px 18px rgba(0, 0, 0, 0.06);
+}
+
+.spool-swatch--translucent::before {
+  content: '';
+  position: absolute;
+  inset: 15%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 45% 40%,
+    rgba(255, 255, 255, 0.52) 0%,
+    rgba(255, 255, 255, 0.1) 52%,
+    transparent 72%
+  );
+  pointer-events: none;
+}
+
+@supports not (background: color-mix(in srgb, red 50%, blue)) {
+  .spool-swatch--translucent {
+    background-image: radial-gradient(
+      circle at 50% 55%,
+      rgba(255, 255, 255, 0.58) 0%,
+      rgba(255, 255, 255, 0.12) 48%,
+      transparent 72%
+    );
+  }
+}
+
+/* Silk / glossy: round specular + form shading (was solid look) */
+.spool-swatch--silk {
+  background:
+    radial-gradient(
+      circle at 30% 26%,
+      color-mix(in srgb, var(--swatch-fill) 42%, #ffffff) 0%,
+      transparent 48%
+    ),
+    linear-gradient(
+      168deg,
+      color-mix(in srgb, var(--swatch-fill) 78%, #1a1a1a) 0%,
+      var(--swatch-fill) 48%,
+      color-mix(in srgb, var(--swatch-fill) 88%, #f0f0f0) 100%
+    );
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.28),
+    inset 0 -5px 10px rgba(0, 0, 0, 0.22);
+}
+
+@supports not (background: color-mix(in srgb, red 50%, blue)) {
+  .spool-swatch--silk {
+    background:
+      radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.42) 0%, transparent 48%),
+      linear-gradient(168deg, rgba(0, 0, 0, 0.28) 0%, var(--swatch-fill) 50%, rgba(255, 255, 255, 0.18) 100%);
+    box-shadow:
+      inset 0 2px 3px rgba(255, 255, 255, 0.22),
+      inset 0 -5px 10px rgba(0, 0, 0, 0.2);
+  }
+}
+
+.spool-swatch--metallic {
+  background: linear-gradient(
+    125deg,
+    color-mix(in srgb, var(--swatch-fill) 72%, #ffffff) 0%,
+    var(--swatch-fill) 38%,
+    color-mix(in srgb, var(--swatch-fill) 45%, #000000) 72%,
+    color-mix(in srgb, var(--swatch-fill) 78%, #ffffff) 100%
+  );
+}
+
+@supports not (background: color-mix(in srgb, red 50%, blue)) {
+  .spool-swatch--metallic {
+    background: linear-gradient(125deg, #e8e8e8 0%, var(--swatch-fill) 40%, #2a2a2a 100%);
+  }
+}
+
+.spool-swatch--wood {
+  background: repeating-linear-gradient(
+    92deg,
+    color-mix(in srgb, var(--swatch-fill) 38%, #3d2817) 0px 5px,
+    color-mix(in srgb, var(--swatch-fill) 58%, #5c4033) 5px 10px,
+    color-mix(in srgb, var(--swatch-fill) 28%, #1c1410) 10px 14px
+  );
+}
+
+@supports not (background: color-mix(in srgb, red 50%, blue)) {
+  .spool-swatch--wood {
+    background: repeating-linear-gradient(92deg, #4a3728 0px 5px, #7d5a44 5px 10px, #2c1f14 10px 14px);
+    box-shadow: inset 0 0 10px var(--swatch-fill);
+  }
+}
+
+/* Base hue stays visible; small corner badge shows multicolor / gradient filament */
+.spool-swatch--multicolor {
+  background: var(--swatch-fill, #6e7681);
+}
+
+.spool-swatch--multicolor::after {
+  content: '';
+  position: absolute;
+  right: -10%;
+  bottom: -10%;
+  width: clamp(5px, 46%, 18px);
+  height: clamp(5px, 46%, 18px);
+  border-radius: 50%;
+  border: 1.5px solid var(--border-color);
+  box-sizing: border-box;
+  background: conic-gradient(
+    from 0.28turn,
+    #ff006e,
+    #ffbe0b,
+    #8338ec,
+    #3a86ff,
+    #06ffa5,
+    #ff006e
+  );
+  box-shadow: 0 0 0 1px var(--bg-secondary, rgba(13, 17, 23, 0.95));
+}
+
+.spool-swatch--glow {
+  box-shadow:
+    0 0 8px 2px color-mix(in srgb, var(--swatch-fill) 75%, transparent),
+    inset 0 0 6px color-mix(in srgb, var(--swatch-fill) 35%, #ffffff);
+}
+
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  .spool-swatch--glow {
+    box-shadow: 0 0 10px 2px var(--swatch-fill);
+  }
+}
+
+/* Carbon fiber–filled: fine weave over base hue */
+.spool-swatch--carbon {
+  background-color: var(--swatch-fill);
+  background-image:
+    repeating-linear-gradient(
+      -52deg,
+      rgba(0, 0, 0, 0.28) 0 0.8px,
+      transparent 0.8px 3.5px
+    ),
+    repeating-linear-gradient(
+      52deg,
+      rgba(255, 255, 255, 0.07) 0 0.8px,
+      transparent 0.8px 4px
+    );
+}
+
+/* Glass / fiber-filled: light flecks (GF nylon, etc.) */
+.spool-swatch--fiber {
+  background-color: var(--swatch-fill);
+  background-image:
+    radial-gradient(circle at 18% 28%, rgba(255, 255, 255, 0.42) 0 0.45px, transparent 1.4px),
+    radial-gradient(circle at 62% 18%, rgba(255, 255, 255, 0.32) 0 0.4px, transparent 1.2px),
+    radial-gradient(circle at 78% 72%, rgba(255, 255, 255, 0.28) 0 0.4px, transparent 1.2px),
+    radial-gradient(circle at 35% 82%, rgba(0, 0, 0, 0.12) 0 0.35px, transparent 1px),
+    radial-gradient(circle at 88% 48%, rgba(255, 255, 255, 0.22) 0 0.35px, transparent 1px);
+  background-size: 7px 7px, 9px 9px, 8px 8px, 6px 6px, 11px 11px;
+}

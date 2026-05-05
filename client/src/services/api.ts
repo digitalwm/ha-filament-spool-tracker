@@ -70,7 +70,8 @@ export const spoolsApi = {
   delete: (id: string) => api.delete(`/spools/${id}`),
   deduct: (id: string, data: DeductionRequest) => api.post<Spool>(`/spools/${id}/deduct`, data),
   archive: (id: string) => api.post<Spool>(`/spools/${id}/archive`),
-  activate: (id: string) => api.post<Spool>(`/spools/${id}/activate`),
+  activate: (id: string, data?: { printerId?: string | null }) =>
+    api.post<Spool>(`/spools/${id}/activate`, data ?? {}),
 };
 
 export const printJobsApi = {
