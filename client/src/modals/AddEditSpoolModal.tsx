@@ -71,9 +71,11 @@ export default function AddEditSpoolModal({
     const r = resolvedFilamentType(initialSplit.base, initialSplit.custom);
     return `${r} - ${matchColorName(spool)}`;
   });
-  /** Skip first effect run so we do not overwrite the loaded name on edit (or initial add name). */
-  const skipMaterialColorNameUpdateOnce = useRef(true);
 
+  const syncNameFromMaterialAndColor = (base: string, custom: string, color: string) => {
+    const r = resolvedFilamentType(base, custom);
+    setName(`${r} - ${color}`);
+  };
   const [manufacturer, setManufacturer] = useState(spool?.manufacturer ?? '');
   const [initialWeight, setInitialWeight] = useState(String(spool?.initialWeight ?? defaultWeightGrams));
   const [remainingWeight, setRemainingWeight] = useState(
@@ -88,18 +90,12 @@ export default function AddEditSpoolModal({
     }
     if (prevDefaultWeightGrams.current === defaultWeightGrams) return;
     prevDefaultWeightGrams.current = defaultWeightGrams;
-    setInitialWeight(String(defaultWeightGrams));
-    setRemainingWeight(String(defaultWeightGrams));
+    const next = String(defaultWeightGrams);
+    queueMicrotask(() => {
+      setInitialWeight(next);
+      setRemainingWeight(next);
+    });
   }, [spool, defaultWeightGrams]);
-
-  useEffect(() => {
-    if (skipMaterialColorNameUpdateOnce.current) {
-      skipMaterialColorNameUpdateOnce.current = false;
-      return;
-    }
-    const r = resolvedFilamentType(filamentBase, filamentCustom);
-    setName(`${r} - ${selectedColor}`);
-  }, [filamentBase, filamentCustom, selectedColor]);
 
   const [spoolWeight, setSpoolWeight] = useState(String(spool?.spoolWeight ?? ''));
   const [diameter, setDiameter] = useState(String(spool?.diameter ?? 1.75));
@@ -142,7 +138,11 @@ export default function AddEditSpoolModal({
               <label>Filament material *</label>
               <select
                 value={filamentBase}
-                onChange={(e) => setFilamentBase(e.target.value)}
+                onChange={(e) => {
+                  const base = e.target.value;
+                  setFilamentBase(base);
+                  syncNameFromMaterialAndColor(base, filamentCustom, selectedColor);
+                }}
                 required
               >
                 {[...FILAMENT_BASE_TYPES, 'Other'].map((t) => (
@@ -169,7 +169,11 @@ export default function AddEditSpoolModal({
               <input
                 type="text"
                 value={filamentCustom}
-                onChange={(e) => setFilamentCustom(e.target.value)}
+                onChange={(e) => {
+                  const custom = e.target.value;
+                  setFilamentCustom(custom);
+                  syncNameFromMaterialAndColor(filamentBase, custom, selectedColor);
+                }}
                 placeholder="e.g. PETG CF, PAHT-CF…"
                 autoComplete="off"
               />
@@ -195,7 +199,10 @@ export default function AddEditSpoolModal({
                   key={c.name}
                   type="button"
                   className={`color-swatch ${selectedColor === c.name ? 'selected' : ''}`}
-                  onClick={() => setSelectedColor(c.name)}
+                  onClick={() => {
+                    setSelectedColor(c.name);
+                    syncNameFromMaterialAndColor(filamentBase, filamentCustom, c.name);
+                  }}
                   title={c.name}
                 >
                   <SpoolColorSwatch colorHex={c.hex} colorStyle={colorStyle} colorName={c.name} />
@@ -213,18 +220,39 @@ export default function AddEditSpoolModal({
           <div className="form-row">
             <div className="form-group">
               <label>Initial Weight (g) *</label>
-              <input type="number" value={initialWeight} onChange={(e) => setInitialWeight(e.target.value)} min="1" required />
+              <input
+                type="number"
+                value={initialWeight}
+                onChange={(e) => setInitialWeight(e.target.value)}
+                min="0.01"
+                step="any"
+                required
+              />
             </div>
             <div className="form-group">
               <label>Remaining Weight (g) *</label>
-              <input type="number" value={remainingWeight} onChange={(e) => setRemainingWeight(e.target.value)} min="0" required />
+              <input
+                type="number"
+                value={remainingWeight}
+                onChange={(e) => setRemainingWeight(e.target.value)}
+                min="0"
+                step="any"
+                required
+              />
             </div>
           </div>
 
           <div className="form-row">
             <div className="form-group">
               <label>Spool Weight (g)</label>
-              <input type="number" value={spoolWeight} onChange={(e) => setSpoolWeight(e.target.value)} min="0" placeholder="Empty spool weight" />
+              <input
+                type="number"
+                value={spoolWeight}
+                onChange={(e) => setSpoolWeight(e.target.value)}
+                min="0"
+                step="any"
+                placeholder="Empty spool weight"
+              />
             </div>
             <div className="form-group">
               <label>Diameter (mm)</label>

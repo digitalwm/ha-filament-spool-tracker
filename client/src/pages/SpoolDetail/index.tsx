@@ -154,6 +154,7 @@ export default function SpoolDetailPage() {
 
       {showEditModal && spool && (
         <AddEditSpoolModal
+          key={spool.id}
           spool={spool}
           onSave={handleSaveEdit}
           onCancel={() => setShowEditModal(false)}

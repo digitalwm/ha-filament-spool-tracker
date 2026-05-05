@@ -92,44 +92,31 @@
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
-/* Translucent: milky core + bright rim (gel); avoids whole-dot opacity */
+/* Translucent: full swatch hue + small frosted white center (readable tint) */
 .spool-swatch--translucent {
-  background-color: var(--swatch-fill);
-  background-image: radial-gradient(
-    circle at 50% 55%,
-    color-mix(in srgb, var(--swatch-fill) 22%, rgba(255, 255, 255, 0.92)) 0%,
-    color-mix(in srgb, var(--swatch-fill) 58%, rgba(255, 255, 255, 0.38)) 46%,
-    var(--swatch-fill) 78%
-  );
+  background: var(--swatch-fill);
   box-shadow:
-    inset 0 0 0 2px rgba(255, 255, 255, 0.55),
-    inset 0 3px 14px rgba(255, 255, 255, 0.45),
-    inset 0 -8px 18px rgba(0, 0, 0, 0.06);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.32),
+    inset 0 -4px 10px rgba(0, 0, 0, 0.1);
 }
 
 .spool-swatch--translucent::before {
   content: '';
   position: absolute;
-  inset: 15%;
+  width: 34%;
+  height: 34%;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   border-radius: 50%;
   background: radial-gradient(
-    circle at 45% 40%,
-    rgba(255, 255, 255, 0.52) 0%,
-    rgba(255, 255, 255, 0.1) 52%,
-    transparent 72%
+    circle at 42% 38%,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.65) 65%,
+    rgba(255, 255, 255, 0.28) 100%
   );
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.06);
   pointer-events: none;
-}
-
-@supports not (background: color-mix(in srgb, red 50%, blue)) {
-  .spool-swatch--translucent {
-    background-image: radial-gradient(
-      circle at 50% 55%,
-      rgba(255, 255, 255, 0.58) 0%,
-      rgba(255, 255, 255, 0.12) 48%,
-      transparent 72%
-    );
-  }
 }
 
 /* Silk / glossy: round specular + form shading (was solid look) */
