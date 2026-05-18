@@ -191,10 +191,12 @@ export default function DashboardPage() {
                 return (
               <div key={printer.id} className="printer-dashboard-row">
                 <div className="printer-with-spool-card">
-                  <span className="printer-with-spool-name">{printer.name}</span>
-                  {printer.displaySlot && (
-                    <span className="printer-with-spool-slot">{printer.displaySlot.slotLabel}</span>
-                  )}
+                  <div className="printer-with-spool-title">
+                    <span className="printer-with-spool-name">{printer.name}</span>
+                    {printer.displaySlot && (
+                      <span className="printer-with-spool-slot">Now using {printer.displaySlot.slotLabel}</span>
+                    )}
+                  </div>
                   <SpoolSelect
                     value={shownSpool?.id ?? null}
                     onChange={(id) => handlePrinterLoadedSpoolChange(printer, id)}
@@ -242,7 +244,7 @@ export default function DashboardPage() {
                     ))}
                   />
                   {printer.slots && printer.slots.length > 0 && (
-                    <AMSVisualTrayBoard slots={printer.slots} compact />
+                    <AMSVisualTrayBoard slots={printer.slots} size="large" />
                   )}
                 </div>
                 <DashboardPrinterJobCard

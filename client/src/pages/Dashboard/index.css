@@ -141,7 +141,7 @@
 
 .printer-dashboard-row {
   display: grid;
-  grid-template-columns: minmax(200px, 300px) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--spacing-md);
   align-items: stretch;
 }
@@ -160,29 +160,42 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: var(--spacing-md);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
-  max-width: 300px;
+  gap: var(--spacing-sm);
   width: 100%;
 }
 
 .printer-with-spool-card .ams-board {
-  margin-top: var(--spacing-xs);
+  margin-top: var(--spacing-sm);
+}
+
+.printer-with-spool-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  min-width: 0;
 }
 
 .printer-with-spool-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .printer-with-spool-slot {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--accent-primary);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .printer-no-spool {
