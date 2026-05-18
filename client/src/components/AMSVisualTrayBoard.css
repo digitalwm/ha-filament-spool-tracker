@@ -1,0 +1,131 @@
+.ams-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.ams-board-empty {
+  display: block;
+  padding: 10px;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 12px;
+  background: var(--bg-primary);
+}
+
+.ams-tray {
+  position: relative;
+  min-width: 0;
+  min-height: 132px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  overflow: hidden;
+}
+
+.ams-tray-active {
+  border-color: var(--accent-primary);
+  box-shadow: inset 0 0 0 1px rgba(88, 166, 255, 0.32);
+}
+
+.ams-tray-unassigned {
+  border-color: var(--warning-color);
+}
+
+.ams-tray-empty {
+  opacity: 0.68;
+}
+
+.ams-tray-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.ams-tray-number {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  padding: 2px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+
+.ams-tray-live {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.ams-tray-spool {
+  display: flex;
+  justify-content: center;
+}
+
+.ams-tray-swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.ams-tray-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: center;
+}
+
+.ams-tray-name,
+.ams-tray-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ams-tray-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ams-tray-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ams-board-compact {
+  gap: 6px;
+}
+
+.ams-board-compact .ams-tray {
+  min-height: 92px;
+  padding: 7px;
+}
+
+.ams-board-compact .ams-tray-swatch {
+  width: 30px;
+  height: 30px;
+}
+
+.ams-board-compact .ams-tray-name {
+  font-size: 11px;
+}
+
+@media (max-width: 768px) {
+  .ams-board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

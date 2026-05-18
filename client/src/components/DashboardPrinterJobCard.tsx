@@ -77,9 +77,10 @@ export interface DashboardPrinterJobCardProps {
   /** Grams left on the spool loaded on this printer (dashboard row). */
   loadedSpoolRemainingGrams?: number | null;
   deductionMode?: string | null;
+  activeSlotId?: string | null;
 }
 
-export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainingGrams, deductionMode }: DashboardPrinterJobCardProps) {
+export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainingGrams, deductionMode, activeSlotId }: DashboardPrinterJobCardProps) {
   if (!job) {
     return (
       <div className="dashboard-printer-job-card dashboard-printer-job-card--idle">
@@ -120,6 +121,9 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
     return d.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' });
   })();
   const multiSpoolUsages = (job.spoolUsages ?? []).filter((u) => u.gramsUsed > 0);
+  const usageTotal = multiSpoolUsages.reduce((sum, usage) => sum + usage.gramsUsed, 0);
+  const usageColors = ['#ffffff', '#111111', '#808080', '#2d6a4f', '#58a6ff', '#f0883e'];
+  const activeUsage = multiSpoolUsages.find((usage) => usage.slotId === activeSlotId) ?? null;
 
   return (
     <div
@@ -132,6 +136,9 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
         ) : (
           <div className="dashboard-printer-job-image dashboard-printer-job-image--placeholder" aria-hidden />
         )}
+        <div className="dashboard-printer-job-media-overlay">
+          <span>{hasProgress ? `${Math.round(progress)}%` : 'Printing'}</span>
+        </div>
       </div>
       <div className="dashboard-printer-job-body">
         <div className="dashboard-printer-job-head">
@@ -202,12 +209,41 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
           </span>
         </div>
         {multiSpoolUsages.length > 0 && (
-          <div className="dashboard-printer-job-usage">
-            {multiSpoolUsages.map((usage) => (
-              <span key={usage.id} className="dashboard-printer-job-usage-pill">
-                {usage.spool?.name ?? usage.slotLabel ?? 'Slot'}: {Math.round(usage.gramsUsed)}g
+          <div className="dashboard-printer-job-usage-panel">
+            <div className="dashboard-printer-job-usage-stack" title="Multi-spool usage timeline">
+              {multiSpoolUsages.map((usage, idx) => (
+                <span
+                  key={usage.id}
+                  className={usage.slotId === activeSlotId ? 'dashboard-printer-job-usage-segment-active' : ''}
+                  style={{
+                    width: `${Math.max(5, (usage.gramsUsed / Math.max(usageTotal, 1)) * 100)}%`,
+                    background: usage.spool?.colorHex ?? usageColors[idx % usageColors.length],
+                  }}
+                />
+              ))}
+            </div>
+            <div className="dashboard-printer-job-usage">
+              {multiSpoolUsages.map((usage) => (
+                <span
+                  key={usage.id}
+                  className={`dashboard-printer-job-usage-pill ${usage.slotId === activeSlotId ? 'dashboard-printer-job-usage-pill-active' : ''}`}
+                >
+                  <SpoolColorSwatch
+                    className="dashboard-printer-job-usage-dot"
+                    colorHex={usage.spool?.colorHex ?? null}
+                    colorStyle={usage.spool?.colorStyle ?? 'solid'}
+                    colorName={usage.spool?.color ?? usage.slotLabel ?? 'Slot'}
+                  />
+                  {usage.slotId === activeSlotId ? 'Now: ' : ''}
+                  {usage.spool?.name ?? usage.slotLabel ?? 'Slot'} · {Math.round(usage.gramsUsed)}g
+                </span>
+              ))}
+            </div>
+            {activeUsage && (
+              <span className="dashboard-printer-job-now">
+                Currently using {activeUsage.spool?.name ?? activeUsage.slotLabel ?? 'active slot'}
               </span>
-            ))}
+            )}
           </div>
         )}
       </div>

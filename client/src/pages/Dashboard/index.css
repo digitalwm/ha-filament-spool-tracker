@@ -4,6 +4,21 @@
   gap: var(--spacing-lg);
 }
 
+.active-tray-toast {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  align-self: flex-end;
+  max-width: min(520px, 100%);
+  padding: 10px 12px;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  box-shadow: var(--shadow-md);
+}
+
 .dashboard-status-row {
   display: flex;
   flex-wrap: wrap;
@@ -151,6 +166,10 @@
   gap: var(--spacing-xs);
   max-width: 300px;
   width: 100%;
+}
+
+.printer-with-spool-card .ams-board {
+  margin-top: var(--spacing-xs);
 }
 
 .printer-with-spool-name {

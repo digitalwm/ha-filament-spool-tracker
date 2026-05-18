@@ -8,6 +8,7 @@ import ConfirmModal from '@modals/ConfirmModal';
 import ProgressBar from '@components/ProgressBar';
 import SpoolColorSwatch from '@components/SpoolColorSwatch';
 import SpoolSelect from '@components/SpoolSelect';
+import AMSVisualTrayBoard from '@components/AMSVisualTrayBoard';
 import './index.css';
 
 export default function PrintersPage() {
@@ -316,6 +317,13 @@ export default function PrintersPage() {
                     <span>{printer.entityPrintProgress ? 'Progress entity saved' : 'Progress entity missing'}</span>
                   </div>
                   {printer.slots && printer.slots.length > 0 ? (
+                    <>
+                    <AMSVisualTrayBoard
+                      slots={printer.slots}
+                      spools={spools}
+                      editable
+                      onSlotSpoolChange={(slot, spoolId) => handleSlotSpoolChange(printer, slot.id, spoolId)}
+                    />
                     <div className="printer-slot-list">
                       {printer.slots.map((slot) => (
                         <div key={slot.id} className={`printer-slot-row ${slot.isActive ? 'printer-slot-row-active' : ''}`}>
@@ -357,6 +365,7 @@ export default function PrintersPage() {
                         </div>
                       ))}
                     </div>
+                    </>
                   ) : (
                     <p className="printer-slot-empty">No slots synced yet.</p>
                   )}

@@ -8,12 +8,15 @@ import ProgressBar from '@components/ProgressBar';
 import SpoolColorSwatch from '@components/SpoolColorSwatch';
 import SpoolMetaBadges from '@components/SpoolMetaBadges';
 import SpoolSelect from '@components/SpoolSelect';
+import AMSVisualTrayBoard from '@components/AMSVisualTrayBoard';
 import './index.css';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [trayToast, setTrayToast] = useState<string | null>(null);
+  const [, setSeenActiveSlots] = useState<Record<string, string | null>>({});
 
   const fetchStats = useCallback(async () => {
     try {
@@ -56,6 +59,28 @@ export default function DashboardPage() {
     [stats],
   );
 
+  useEffect(() => {
+    if (!stats) return;
+    setSeenActiveSlots((prev) => {
+      const next = { ...prev };
+      let toast: string | null = null;
+      for (const printer of stats.printersList ?? []) {
+        const activeSlotId = printer.displaySlot?.id ?? null;
+        const oldSlotId = prev[printer.id];
+        if (oldSlotId !== undefined && oldSlotId !== activeSlotId && activeSlotId) {
+          const spoolName = printer.displaySpool?.name ?? printer.displaySlot?.filamentType ?? 'unassigned spool';
+          toast = `${printer.name} switched to ${printer.displaySlot?.slotLabel ?? 'active tray'} · ${spoolName}`;
+        }
+        next[printer.id] = activeSlotId;
+      }
+      if (toast) {
+        setTrayToast(toast);
+        window.setTimeout(() => setTrayToast(null), 4500);
+      }
+      return next;
+    });
+  }, [stats]);
+
   const handlePrinterLoadedSpoolChange = async (printer: Printer, activeSpoolId: string | null) => {
     if (!stats) return;
     try {
@@ -90,6 +115,12 @@ export default function DashboardPage() {
 
   return (
     <div className="dashboard">
+      {trayToast && (
+        <div className="active-tray-toast" role="status">
+          {trayToast}
+        </div>
+      )}
+
       <div className="dashboard-status-row">
         <span className="dashboard-mode-pill">
           {stats.deductionMode === 'on_completion' ? 'Deduction: on completion' : 'Deduction: live during print'}
@@ -210,12 +241,16 @@ export default function DashboardPage() {
                       <span className="spool-select-placeholder">No spool loaded — click to select</span>
                     ))}
                   />
+                  {printer.slots && printer.slots.length > 0 && (
+                    <AMSVisualTrayBoard slots={printer.slots} compact />
+                  )}
                 </div>
                 <DashboardPrinterJobCard
                   job={jobByPrinterId.get(printer.id) ?? null}
                   live={liveByPrinter[printer.id]}
                   loadedSpoolRemainingGrams={shownRemaining}
                   deductionMode={stats.deductionMode}
+                  activeSlotId={printer.displaySlot?.id ?? null}
                 />
               </div>
                 );
