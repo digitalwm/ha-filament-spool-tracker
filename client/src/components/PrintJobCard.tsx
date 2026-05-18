@@ -192,9 +192,11 @@ export default function PrintJobCard({
             ))}
             {job.status === 'completed' && (
               <div className={`print-job-completion-summary ${unassignedUsage > 0 ? 'print-job-completion-summary-warning' : ''}`}>
-                <span><strong>{Math.round(usageTotal)}g</strong> deducted across {multiSpoolUsages.length} spool{multiSpoolUsages.length === 1 ? '' : 's'}</span>
+                <span className="print-job-completion-total">
+                  <strong>{Math.round(usageTotal)}g</strong> deducted across {multiSpoolUsages.length} spool{multiSpoolUsages.length === 1 ? '' : 's'}
+                </span>
                 {multiSpoolUsages.slice(0, 4).map((usage) => (
-                  <span key={`${usage.id}-summary`}>
+                  <span key={`${usage.id}-summary`} className="print-job-completion-spool">
                     {usage.spool?.name ?? usage.slotLabel ?? 'Unassigned'}: {usage.spool ? `${Math.round(usage.spool.remainingWeight)}g left` : `${Math.round(usage.gramsUsed)}g unassigned`}
                   </span>
                 ))}

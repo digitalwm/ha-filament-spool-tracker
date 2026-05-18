@@ -249,6 +249,44 @@
   padding: 0;
 }
 
+.print-job-completion-summary {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 7px 8px;
+  border: 1px solid rgba(63, 185, 80, 0.28);
+  border-radius: var(--radius-sm);
+  background: rgba(35, 134, 54, 0.08);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.print-job-completion-summary-warning {
+  border-color: rgba(248, 81, 73, 0.35);
+  background: rgba(248, 81, 73, 0.08);
+}
+
+.print-job-completion-total {
+  color: var(--text-primary);
+  font-weight: 600;
+  margin-right: 2px;
+}
+
+.print-job-completion-spool {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
 @media (max-width: 768px) {
   .print-job-card {
     flex-direction: column;
