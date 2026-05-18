@@ -39,6 +39,23 @@ function remainingLabel(slot: PrinterSlot): string {
   return slot.isEmpty ? '0%' : '—';
 }
 
+function normalizeHex(value: string | null | undefined): string | null {
+  const s = (value ?? '').replace(/^#/, '').slice(0, 6).toLowerCase();
+  return s.length === 6 ? s : null;
+}
+
+function hasMismatch(slot: PrinterSlot): boolean {
+  if (!slot.spool || slot.isEmpty) return false;
+  const typeMismatch =
+    Boolean(slot.filamentType) &&
+    slot.filamentType !== 'Empty' &&
+    slot.spool.filamentType.toLowerCase() !== slot.filamentType!.toLowerCase();
+  const trayHex = normalizeHex(slot.colorHex);
+  const spoolHex = normalizeHex(slot.spool.colorHex);
+  const colorMismatch = Boolean(trayHex && spoolHex && trayHex !== spoolHex);
+  return typeMismatch || colorMismatch;
+}
+
 export default function AMSVisualTrayBoard({
   slots = [],
   spools = [],
@@ -56,6 +73,7 @@ export default function AMSVisualTrayBoard({
       {slots.map((slot) => {
         const assigned = Boolean(slot.spoolId);
         const detected = !slot.isEmpty;
+        const mismatch = hasMismatch(slot);
         const fillPercent = remainingPercent(slot);
         const fillColor = slotColor(slot) ?? '#6e7681';
         return (
@@ -66,6 +84,7 @@ export default function AMSVisualTrayBoard({
               slot.isActive ? 'ams-tray-active' : '',
               slot.isEmpty ? 'ams-tray-empty' : '',
               detected && !assigned ? 'ams-tray-unassigned' : '',
+              mismatch ? 'ams-tray-mismatch' : '',
             ].filter(Boolean).join(' ')}
             style={{
               ['--ams-fill-percent' as string]: `${fillPercent}%`,
@@ -76,9 +95,10 @@ export default function AMSVisualTrayBoard({
             <div className="ams-tray-top">
               <span className="ams-tray-number">{trayNumber(slot)}</span>
               {slot.isActive && <span className="ams-tray-live">Using</span>}
+              {mismatch && <span className="ams-tray-mismatch-label">Check</span>}
             </div>
             <div className="ams-tray-visual">
-              <div className="ams-tray-level" aria-hidden>
+              <div className="ams-tray-level" title={`${Math.round(fillPercent)}% remaining`} aria-hidden>
                 <span />
               </div>
               <div className="ams-tray-spool">

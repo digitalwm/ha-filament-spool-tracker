@@ -52,6 +52,7 @@ export default function PrintJobCard({
   const multiSpoolUsages = (job.spoolUsages ?? []).filter((u) => u.gramsUsed > 0);
   const usageTotal = multiSpoolUsages.reduce((sum, usage) => sum + usage.gramsUsed, 0);
   const usageColors = ['#ffffff', '#111111', '#808080', '#2d6a4f', '#58a6ff', '#f0883e'];
+  const unassignedUsage = multiSpoolUsages.reduce((sum, usage) => sum + (usage.spoolId ? 0 : usage.gramsUsed), 0);
 
   return (
     <div className="print-job-card">
@@ -176,6 +177,16 @@ export default function PrintJobCard({
                 )}
               </span>
             ))}
+            {job.status === 'completed' && (
+              <div className={`print-job-completion-summary ${unassignedUsage > 0 ? 'print-job-completion-summary-warning' : ''}`}>
+                <span><strong>{Math.round(usageTotal)}g</strong> deducted across {multiSpoolUsages.length} spool{multiSpoolUsages.length === 1 ? '' : 's'}</span>
+                {multiSpoolUsages.slice(0, 4).map((usage) => (
+                  <span key={`${usage.id}-summary`}>
+                    {usage.spool?.name ?? usage.slotLabel ?? 'Unassigned'}: {usage.spool ? `${Math.round(usage.spool.remainingWeight)}g left` : `${Math.round(usage.gramsUsed)}g unassigned`}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

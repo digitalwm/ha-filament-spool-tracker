@@ -109,6 +109,7 @@ function inferTrayIndexFromEntity(entityId: string, attrs: Record<string, unknow
   if (explicit != null) return explicit;
   const slot = asNumber(attrs.slot);
   if (slot != null) return Math.max(0, slot - 1);
+  if (/external[_\s-]*spool|externalspool|vt[_\s-]*tray|virtual/i.test(entityId)) return 0;
   const m = /(?:^|_)tray[_\s-]*(\d+)(?:_|$)/i.exec(entityId.replace(/^sensor\./, ''));
   if (m) return Math.max(0, Number(m[1]) - 1);
   return null;
@@ -120,6 +121,7 @@ function isTrayLikeState(state: HAState, printer: Printer, requirePrefix = true)
   const attrs = state.attributes ?? {};
   if (requirePrefix && !entity.includes(prefix)) return false;
   if (entity.endsWith('_active_tray')) return false;
+  if (/external[_\s-]*spool|externalspool|vt[_\s-]*tray|virtual/i.test(entity)) return true;
   if (/tray[_\s-]*\d+/i.test(entity) && /ams|tray/i.test(entity)) return true;
   return attrs.slot != null && (
     attrs.filament_id != null ||
@@ -148,11 +150,11 @@ function upsertDataFromState(
     slotLabel: label,
     entityId: state.entity_id,
     isActive: activeOverride ?? asBoolean(attrs.active) ?? false,
-    isEmpty: asBoolean(attrs.empty),
+    isEmpty: asBoolean(attrs.empty) ?? /^empty$/i.test(String(state.state ?? '')),
     tagUid: asString(attrs.tag_uid),
     trayUuid: asString(attrs.tray_uuid),
     filamentId: asString(attrs.filament_id),
-    filamentType: asString(attrs.type),
+    filamentType: asString(attrs.type) ?? (/^empty$/i.test(String(state.state ?? '')) ? 'Empty' : asString(state.state)),
     colorHex: normalizeColor(attrs.color),
     trayWeight: asNumber(attrs.tray_weight),
     remainPercent: asNumber(attrs.remain),

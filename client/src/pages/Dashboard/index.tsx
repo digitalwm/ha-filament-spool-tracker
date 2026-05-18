@@ -54,6 +54,17 @@ export default function DashboardPage() {
     return m;
   }, [stats]);
 
+  const recentJobByPrinterId = useMemo(() => {
+    if (!stats) return new Map<string, PrintJob>();
+    const m = new Map<string, PrintJob>();
+    for (const j of stats.recentPrintJobs ?? []) {
+      if (!j.printerId) continue;
+      const prev = m.get(j.printerId);
+      if (!prev || new Date(j.startedAt) > new Date(prev.startedAt)) m.set(j.printerId, j);
+    }
+    return m;
+  }, [stats]);
+
   const liveByPrinter = useMemo(
     () => (!stats ? {} : (stats.printerJobLiveMetrics ?? {})),
     [stats],
@@ -93,6 +104,23 @@ export default function DashboardPage() {
     } catch {
       fetchStats();
     }
+  };
+
+  const getSuggestedSpoolsForSlot = (printer: Printer) => {
+    const slot = printer.displaySlot;
+    if (!stats || !slot || slot.spoolId || slot.isEmpty) return [];
+    const normalizeHex = (value: string | null | undefined) => (value ?? '').replace(/^#/, '').slice(0, 6).toLowerCase();
+    return (stats.spoolsList ?? [])
+      .map((spool) => {
+        let score = 0;
+        if (slot.filamentType && spool.filamentType.toLowerCase() === slot.filamentType.toLowerCase()) score += 3;
+        if (normalizeHex(slot.colorHex) && normalizeHex(spool.colorHex) === normalizeHex(slot.colorHex)) score += 5;
+        return { spool, score };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 2)
+      .map((entry) => entry.spool);
   };
 
   if (error) {
@@ -246,9 +274,24 @@ export default function DashboardPage() {
                   {printer.slots && printer.slots.length > 0 && (
                     <AMSVisualTrayBoard slots={printer.slots} size="large" />
                   )}
+                  {getSuggestedSpoolsForSlot(printer).length > 0 && (
+                    <div className="dashboard-slot-quick-fix">
+                      <span>Assign active tray:</span>
+                      {getSuggestedSpoolsForSlot(printer).map((spool) => (
+                        <button
+                          key={spool.id}
+                          type="button"
+                          className="btn btn-secondary btn-xs"
+                          onClick={() => handlePrinterLoadedSpoolChange(printer, spool.id)}
+                        >
+                          {spool.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <DashboardPrinterJobCard
-                  job={jobByPrinterId.get(printer.id) ?? null}
+                  job={jobByPrinterId.get(printer.id) ?? recentJobByPrinterId.get(printer.id) ?? null}
                   live={liveByPrinter[printer.id]}
                   loadedSpoolRemainingGrams={shownRemaining}
                   deductionMode={stats.deductionMode}

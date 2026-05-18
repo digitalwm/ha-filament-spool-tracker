@@ -371,6 +371,9 @@ async function handlePrintProgressChange(
       orderBy: { startedAt: 'desc' },
     });
     if (!job) return;
+    if (!job.projectImage) {
+      await cacheCoverImageForJob(prisma, printer, prefix, job.id);
+    }
 
     const weightData = await readPrintWeightUsages(printer);
     const grams = weightData.totalGrams;
@@ -436,6 +439,27 @@ function parsePrintStartMs(value: string | null | undefined): number | null {
   return Number.isNaN(num) ? null : num;
 }
 
+async function cacheCoverImageForJob(
+  prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
+  printer: { entityCoverImage: string | null; entityPrefix: string; haDeviceId: string },
+  printerPrefix: string,
+  jobId: string,
+): Promise<void> {
+  try {
+    const coverImageEntity = printer.entityCoverImage ?? `image.${printerPrefix || printer.entityPrefix || printer.haDeviceId}_cover_image`;
+    const coverImageHaPath = await fetchEntityValue(coverImageEntity, 'entity_picture');
+    if (!coverImageHaPath || !coverImageHaPath.startsWith('/')) return;
+    const cachedPath = await fetchAndCacheCoverImage(coverImageHaPath, jobId);
+    if (!cachedPath) return;
+    await prisma.printJob.update({
+      where: { id: jobId },
+      data: { projectImage: cachedPath },
+    });
+  } catch (err) {
+    logger.debug('Cover image cache retry failed:', err);
+  }
+}
+
 async function onPrintStarted(
   prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
   printerPrefix: string,
@@ -483,6 +507,9 @@ async function onPrintStarted(
         haPrintStartMs != null &&
         Math.abs(haPrintStartMs - existingStartedMs) < SAME_PRINT_TIME_TOLERANCE_MS;
       if (samePrintByTime) {
+        if (!existingInProgress.projectImage) {
+          await cacheCoverImageForJob(prisma, printer, printerPrefix, existingInProgress.id);
+        }
         const activeSlot = await readActiveSlot(printerPrefix);
         const currentUsed = await readCurrentPrintUsedGrams(printer, printerPrefix);
         if (activeSlot && currentUsed != null) {
@@ -502,6 +529,9 @@ async function onPrintStarted(
         const sameName = (existingInProgress.projectName || '').trim() === (projectName || '').trim();
         const startedRecently = Date.now() - existingStartedMs < 3 * 60 * 1000;
         if (sameName || startedRecently) {
+          if (!existingInProgress.projectImage) {
+            await cacheCoverImageForJob(prisma, printer, printerPrefix, existingInProgress.id);
+          }
           const activeSlot = await readActiveSlot(printerPrefix);
           const currentUsed = await readCurrentPrintUsedGrams(printer, printerPrefix);
           if (activeSlot && currentUsed != null) {
@@ -540,13 +570,7 @@ async function onPrintStarted(
     });
 
     if (coverImageHaPath && coverImageHaPath.startsWith('/')) {
-      const cachedPath = await fetchAndCacheCoverImage(coverImageHaPath, job.id);
-      if (cachedPath) {
-        await prisma.printJob.update({
-          where: { id: job.id },
-          data: { projectImage: cachedPath },
-        });
-      }
+      await cacheCoverImageForJob(prisma, printer, printerPrefix, job.id);
     }
 
     trackedPrintStates.set(printerPrefix, {
@@ -737,6 +761,9 @@ async function reconcileInProgressJobs(): Promise<void> {
       ]);
       const pct = parseProgressPercent(progressRaw);
       const grams = parseHaFilamentUsedGrams(weightRaw);
+      if (!job.projectImage) {
+        await cacheCoverImageForJob(prisma, printer, prefix, job.id);
+      }
       if (pct != null || grams != null) {
         await prisma.printJob.update({
           where: { id: job.id },
@@ -774,6 +801,9 @@ async function reconcileActivePrints(): Promise<void> {
         orderBy: { startedAt: 'desc' },
       });
       if (existing) {
+        if (!existing.projectImage) {
+          await cacheCoverImageForJob(prisma, printer, prefix, existing.id);
+        }
         const totalGrams = parseHaFilamentUsedGrams(await fetchEntityState(`sensor.${prefix}_print_weight`));
         const progress = parseProgressPercent(await fetchEntityState(`sensor.${prefix}_print_progress`));
         const activeSlot = await readActiveSlot(prefix);

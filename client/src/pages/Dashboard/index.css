@@ -171,6 +171,24 @@
   margin-top: var(--spacing-sm);
 }
 
+.dashboard-slot-quick-fix {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--warning-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.dashboard-slot-quick-fix span {
+  color: var(--warning-color);
+  font-weight: 600;
+}
+
 .printer-with-spool-title {
   display: flex;
   align-items: baseline;

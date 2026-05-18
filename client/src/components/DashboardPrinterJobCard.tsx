@@ -90,6 +90,7 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
     );
   }
 
+  const isActivePrint = job.status === 'in_progress';
   const img = projectImageSrc(job.projectImage);
   const hasProgress = job.progress != null && !Number.isNaN(job.progress);
   const progress = hasProgress ? job.progress! : 0;
@@ -106,6 +107,7 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
     totalGrams != null && pPct != null ? Math.max(0, totalGrams - (totalGrams * (pPct / 100))) : null;
 
   const spoolLessThanJobTotal =
+    isActivePrint &&
     loadedSpoolRemainingGrams != null &&
     remainingJobGrams != null &&
     loadedSpoolRemainingGrams < remainingJobGrams;
@@ -137,13 +139,15 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
           <div className="dashboard-printer-job-image dashboard-printer-job-image--placeholder" aria-hidden />
         )}
         <div className="dashboard-printer-job-media-overlay">
-          <span>{hasProgress ? `${Math.round(progress)}%` : 'Printing'}</span>
+          <span>{isActivePrint ? (hasProgress ? `${Math.round(progress)}%` : 'Printing') : 'Last print'}</span>
         </div>
       </div>
       <div className="dashboard-printer-job-body">
         <div className="dashboard-printer-job-head">
           <h4 className="dashboard-printer-job-title" title={job.projectName}>{job.projectName}</h4>
-          <Link to="/history?status=in_progress" className="dashboard-printer-job-link">Open</Link>
+          <Link to={isActivePrint ? '/history?status=in_progress' : '/history'} className="dashboard-printer-job-link">
+            {isActivePrint ? 'Open' : 'History'}
+          </Link>
         </div>
         <div className="dashboard-printer-job-progress">
           <ProgressBar
@@ -151,7 +155,7 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
             max={100}
             size="sm"
             showPercent
-            indeterminate={!hasProgress}
+            indeterminate={isActivePrint && !hasProgress}
           />
           <span
             className="dashboard-printer-job-progress-used"
@@ -197,10 +201,10 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
           )}
           {remainingJobGrams != null && (
             <span className={`meta-item ${spoolLessThanJobTotal ? 'dashboard-printer-job-short-text' : ''}`}>
-              {Math.round(remainingJobGrams)}g left to print
+              {isActivePrint ? `${Math.round(remainingJobGrams)}g left to print` : `${Math.round(totalGrams ?? usedGramsRounded ?? 0)}g final`}
             </span>
           )}
-          <span className="meta-item">ETA {eta}</span>
+          {isActivePrint && <span className="meta-item">ETA {eta}</span>}
           <span className="meta-item" title="Filament deduction mode">
             {deductionMode === 'on_completion' ? 'Deducts on finish' : 'Deducts live'}
           </span>
@@ -239,7 +243,7 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
                 </span>
               ))}
             </div>
-            {activeUsage && (
+            {activeUsage && isActivePrint && (
               <span className="dashboard-printer-job-now">
                 Currently using {activeUsage.spool?.name ?? activeUsage.slotLabel ?? 'active slot'}
               </span>
