@@ -147,6 +147,18 @@ export async function publishAvailableSpoolsSensor(): Promise<void> {
         loadedBySpoolId.set(p.activeSpoolId, { id: p.id, name: p.name });
       }
     }
+    const slots = await prisma.printerSlot.findMany({
+      where: { spoolId: { not: null } },
+      include: { printer: { select: { id: true, name: true } } },
+    });
+    for (const slot of slots) {
+      if (slot.spoolId) {
+        loadedBySpoolId.set(slot.spoolId, {
+          id: slot.printer.id,
+          name: `${slot.printer.name} ${slot.slotLabel}`,
+        });
+      }
+    }
 
     const spoolAttrs = spools.map((s) => {
       const loaded = loadedBySpoolId.get(s.id);

@@ -5,28 +5,42 @@ import { publishAllSpooltrackerHASensors } from './haSensors';
 
 const logger = LOG('NOTIFY');
 
-export async function sendNotification(title: string, message: string): Promise<void> {
+export async function isNotificationEnabled(settingKey?: string, defaultValue = true): Promise<boolean> {
+  const prisma = getPrismaClient();
+  if (!prisma) return true;
+
+  try {
+    const keys = ['notifications_enabled'];
+    if (settingKey) keys.push(settingKey);
+    const settings = await prisma.setting.findMany({ where: { key: { in: keys } } });
+    const values = Object.fromEntries(settings.map((s) => [s.key, s.value]));
+    const globalEnabled = values.notifications_enabled == null || (values.notifications_enabled !== 'false' && values.notifications_enabled !== '0');
+    if (!globalEnabled) return false;
+    if (!settingKey) return true;
+    const specific = values[settingKey];
+    return specific == null ? defaultValue : (specific !== 'false' && specific !== '0');
+  } catch (err) {
+    logger.warn('Failed to read notification settings, sending anyway:', err);
+    return true;
+  }
+}
+
+export async function sendNotification(title: string, message: string, settingKey?: string): Promise<void> {
   const token = process.env.SUPERVISOR_TOKEN;
   if (!token) {
     logger.debug(`Notification (dev mode): ${title} — ${message}`);
     return;
   }
 
-  const prisma = getPrismaClient();
-  if (!prisma) {
-    logger.debug(`Notification skipped (no database): ${title} — ${message}`);
-    return;
-  }
-
   try {
-    const setting = await prisma.setting.findUnique({ where: { key: 'notifications_enabled' } });
-    const enabled = setting ? setting.value !== 'false' && setting.value !== '0' : true;
+    const enabled = await isNotificationEnabled(settingKey);
     if (!enabled) {
       logger.debug(`Notification suppressed by settings: ${title}`);
       return;
     }
-  } catch (err) {
-    logger.warn('Failed to read notifications_enabled setting, sending anyway:', err);
+  }
+  catch (err) {
+    logger.warn('Failed to read notification settings, sending anyway:', err);
   }
 
   try {
@@ -58,6 +72,7 @@ export async function checkExpiringSpools(): Promise<void> {
   if (!prisma) return;
 
   try {
+    if (!(await isNotificationEnabled('notify_expiring_spools_enabled'))) return;
     const warningDays = 30;
     const warningDate = new Date();
     warningDate.setDate(warningDate.getDate() + warningDays);
@@ -91,6 +106,7 @@ export async function checkUnassignedJobs(): Promise<void> {
   if (!prisma) return;
 
   try {
+    if (!(await isNotificationEnabled('notify_unassigned_completed_jobs_enabled'))) return;
     const unassigned = await prisma.printJob.count({
       where: { status: 'completed', spoolId: null },
     });
@@ -111,6 +127,7 @@ export async function checkStuckInProgressJobs(): Promise<void> {
   if (!prisma) return;
 
   try {
+    if (!(await isNotificationEnabled('notify_stale_print_jobs_enabled'))) return;
     const [inProgress, activePrinters] = await Promise.all([
       prisma.printJob.count({ where: { status: 'in_progress' } }),
       prisma.printer.count({ where: { isActive: true } }),

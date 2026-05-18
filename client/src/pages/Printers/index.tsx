@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { printersApi, haApi, spoolsApi } from '@services/api';
-import type { Printer, Spool, HAConnectionStatus, HADiscoveredEntity } from '@ha-addon/types';
+import type { Printer, Spool, HAConnectionStatus, HADiscoveredEntity, PrinterTimelineEvent } from '@ha-addon/types';
 import EditPrinterModal, { type EditPrinterSaveData } from '@modals/EditPrinterModal';
 import AddPrinterModal from '@modals/AddPrinterModal';
 import ConfirmModal from '@modals/ConfirmModal';
@@ -21,6 +21,7 @@ export default function PrintersPage() {
   const [deletingPrinter, setDeletingPrinter] = useState<Printer | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [spools, setSpools] = useState<Spool[]>([]);
+  const [timelines, setTimelines] = useState<Record<string, PrinterTimelineEvent[]>>({});
 
   useEffect(() => {
     const loadAll = async () => {
@@ -33,6 +34,8 @@ export default function PrintersPage() {
         setPrinters(printersRes.data);
         setHaStatus(haStatusRes.data);
         setSpools(spoolsRes.data);
+        const timelineEntries = await Promise.all(printersRes.data.map((p) => printersApi.getTimeline(p.id).then((r) => [p.id, r.data] as const).catch(() => [p.id, []] as const)));
+        setTimelines(Object.fromEntries(timelineEntries));
       } catch (err) {
         console.error('Failed to load printers:', err);
       }
@@ -87,8 +90,14 @@ export default function PrintersPage() {
       await printersApi.create({
         name: entity.deviceName,
         haDeviceId: entity.deviceId,
-        entityPrefix: entity.deviceId,
+        entityPrefix: entity.entityPrefix ?? entity.deviceId,
         model: entity.model || undefined,
+        entityPrintStatus: entity.entityPrintStatus ?? undefined,
+        entityTaskName: entity.entityTaskName ?? undefined,
+        entityPrintWeight: entity.entityPrintWeight ?? undefined,
+        entityCoverImage: entity.entityCoverImage ?? undefined,
+        entityPrintStart: entity.entityPrintStart ?? undefined,
+        entityPrintProgress: entity.entityPrintProgress ?? undefined,
       });
       const res = await printersApi.getAll();
       setPrinters(res.data);
@@ -142,6 +151,37 @@ export default function PrintersPage() {
       setPrinters((prev) => prev.map((p) => (p.id === printer.id ? res.data : p)));
     } catch (err) {
       console.error('Failed to update loaded spool:', err);
+    }
+  };
+
+  const handleSyncSlots = async (printer: Printer) => {
+    try {
+      await printersApi.syncSlots(printer.id);
+      const res = await printersApi.getAll();
+      setPrinters(res.data);
+    } catch (err) {
+      console.error('Failed to sync printer slots:', err);
+    }
+  };
+
+  const handleSlotSpoolChange = async (printer: Printer, slotId: string, spoolId: string | null) => {
+    try {
+      await printersApi.updateSlot(printer.id, slotId, { spoolId });
+      const res = await printersApi.getAll();
+      setPrinters(res.data);
+    } catch (err) {
+      console.error('Failed to update printer slot:', err);
+    }
+  };
+
+  const handleRecoverActivePrint = async (printer: Printer) => {
+    try {
+      await printersApi.recoverActivePrint(printer.id);
+      const [printersRes, spoolsRes] = await Promise.all([printersApi.getAll(), spoolsApi.getAll()]);
+      setPrinters(printersRes.data);
+      setSpools(spoolsRes.data);
+    } catch (err) {
+      console.error('Failed to recover active print:', err);
     }
   };
 
@@ -251,6 +291,84 @@ export default function PrintersPage() {
                       aria-label="Select loaded spool"
                     />
                   )}
+                </div>
+                <div className="printer-card-slots">
+                  <div className="printer-card-slots-header">
+                    <span className="printer-card-spool-label">AMS / feed slots</span>
+                    <span className="printer-slot-health">
+                      {printer.slots?.some((slot) => slot.isActive)
+                        ? `Active: ${printer.slots.find((slot) => slot.isActive)?.slotLabel}`
+                        : 'No active tray'}
+                      {' · '}
+                      {(printer.slots ?? []).filter((slot) => !slot.isEmpty && slot.spoolId).length}/{(printer.slots ?? []).filter((slot) => !slot.isEmpty).length} assigned
+                    </span>
+                    <button type="button" className="btn btn-secondary btn-xs" onClick={() => handleSyncSlots(printer)}>
+                      Sync from HA
+                    </button>
+                    <button type="button" className="btn btn-secondary btn-xs" onClick={() => handleRecoverActivePrint(printer)}>
+                      Recover print
+                    </button>
+                  </div>
+                  <div className="printer-entity-health">
+                    <span>Prefix: {printer.entityPrefix}</span>
+                    <span>{printer.entityPrintStatus ? 'Status entity saved' : 'Status entity missing'}</span>
+                    <span>{printer.entityPrintWeight ? 'Weight entity saved' : 'Weight entity missing'}</span>
+                    <span>{printer.entityPrintProgress ? 'Progress entity saved' : 'Progress entity missing'}</span>
+                  </div>
+                  {printer.slots && printer.slots.length > 0 ? (
+                    <div className="printer-slot-list">
+                      {printer.slots.map((slot) => (
+                        <div key={slot.id} className={`printer-slot-row ${slot.isActive ? 'printer-slot-row-active' : ''}`}>
+                          <div className="printer-slot-info">
+                            <span className="printer-slot-label">{slot.slotLabel}</span>
+                            <span className="printer-slot-meta">
+                              {slot.filamentType || 'Unknown'}
+                              {slot.colorHex ? ` · ${slot.colorHex}` : ''}
+                              {slot.isEmpty ? ' · empty' : ''}
+                            </span>
+                          </div>
+                          <SpoolSelect
+                            value={slot.spoolId ?? null}
+                            onChange={(id) => handleSlotSpoolChange(printer, slot.id, id)}
+                            spools={spools.filter((s) => s.archivedAt === null)}
+                            placeholder="Assign spool"
+                            size="sm"
+                            aria-label={`Assign spool to ${slot.slotLabel}`}
+                          />
+                          {!slot.isEmpty && !slot.spoolId && (
+                            <div className="printer-slot-warning">
+                              Filament detected, no spool assigned
+                            </div>
+                          )}
+                          {!slot.spoolId && slot.suggestedSpools && slot.suggestedSpools.length > 0 && (
+                            <div className="printer-slot-suggestions">
+                              {slot.suggestedSpools.map((spool) => (
+                                <button
+                                  key={spool.id}
+                                  type="button"
+                                  className="btn btn-secondary btn-xs"
+                                  onClick={() => handleSlotSpoolChange(printer, slot.id, spool.id)}
+                                >
+                                  Use {spool.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="printer-slot-empty">No slots synced yet.</p>
+                  )}
+                </div>
+                <div className="printer-timeline">
+                  <span className="printer-card-spool-label">Timeline</span>
+                  {(timelines[printer.id] ?? []).slice(0, 5).map((event) => (
+                    <div key={event.id} className={`printer-timeline-event printer-timeline-event-${event.type}`}>
+                      <span>{new Date(event.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span>{event.label}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}

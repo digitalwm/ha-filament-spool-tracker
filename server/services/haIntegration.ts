@@ -1,10 +1,14 @@
 import WebSocket from 'ws';
 import { getPrismaClient } from '../database';
 import { LOG } from '../utils/logger';
-import { getHABaseUrl, getHAWebSocketUrl } from '../utils/haUrl';
+import { getHAWebSocketUrl } from '../utils/haUrl';
 import { fetchAndCacheCoverImage } from './coverImageCache';
-import { sendNotification } from './notifications';
+import { isNotificationEnabled, sendNotification } from './notifications';
 import { publishAllSpooltrackerHASensors } from './haSensors';
+import { fetchHAEntityState, fetchHAEntityValue, fetchHAState, fetchHAStates } from './haState';
+import { applyMultiSpoolDeduction, readPrintWeightUsages } from './multiSpoolDeduction';
+import { slotLabel, syncPrinterSlotsFromHA, upsertActiveSlotFromHAState, type SlotIdentity, type SlotUsage } from './printerSlots';
+import { commitUndeductedUsageRows } from './spoolUsageCommit';
 
 const logger = LOG('HA_INTEGRATION');
 
@@ -15,11 +19,15 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconcileTimer: ReturnType<typeof setInterval> | null = null;
 let subscriptionId: number | null = null;
 
-const trackedPrintStates = new Map<string, {
+type TrackedPrintState = {
   printerId: string | null;
   lastStatus: string;
   printJobId: string | null;
-}>();
+  activeSlot?: SlotIdentity | null;
+  lastWeightGrams?: number | null;
+};
+
+const trackedPrintStates = new Map<string, TrackedPrintState>();
 
 function nextId(): number {
   return messageId++;
@@ -40,7 +48,10 @@ export async function startHAIntegration(): Promise<void> {
 
   if (reconcileTimer) clearInterval(reconcileTimer);
   reconcileTimer = setInterval(() => {
-    void reconcileInProgressJobs();
+    void (async () => {
+      await reconcileActivePrints();
+      await reconcileInProgressJobs();
+    })();
   }, 60_000);
 }
 
@@ -102,6 +113,9 @@ function handleHAMessage(msg: Record<string, unknown>, token: string): void {
       logger.info('Authenticated with Home Assistant');
       isConnected = true;
       subscribeToStateChanges();
+      setTimeout(() => {
+        void reconcileActivePrints();
+      }, 1_000);
       break;
 
     case 'auth_invalid':
@@ -172,12 +186,18 @@ async function handleStateChange(data: {
   if (!entity_id || !new_state) return;
 
   const state = (new_state.state as string)?.toLowerCase();
-  const manufacturer = ((new_state.attributes as Record<string, unknown>)?.manufacturer as string)?.toLowerCase() ?? '';
+  const attrs = (new_state.attributes as Record<string, unknown>) ?? {};
+  const manufacturer = (attrs.manufacturer as string)?.toLowerCase() ?? '';
+  const brand = (attrs.brand as string)?.toLowerCase() ?? '';
+  const friendlyName = (attrs.friendly_name as string)?.toLowerCase() ?? '';
 
   const prefix = entity_id.replace(/^sensor\./, '').replace(/_print_status$/, '');
   const isBambu =
     entity_id.toLowerCase().includes('bambu') ||
     manufacturer.includes('bambu') ||
+    brand.includes('bambu') ||
+    friendlyName.includes('bambu') ||
+    /_(print_status|print_progress|active_tray|ams_tray_\d+)$/i.test(entity_id) ||
     (PRINT_STATUS_STATES.has(state ?? '') && /^(p1|p2|p2s|x1|x1c|a1|a1m|h2|p1s)(_|$)/i.test(prefix));
 
   if (!isBambu) return;
@@ -193,13 +213,92 @@ async function handleStateChange(data: {
     return;
   }
 
+  if (entity_id.endsWith('_active_tray') && entity_id.startsWith('sensor.')) {
+    await handleActiveTrayChange(entity_id, new_state);
+    return;
+  }
+
   // Heuristic: Bambu filament/material entities changing likely indicate a manual filament change.
   const oldState = (old_state?.state as string | undefined)?.toLowerCase();
   if (oldState === state) return;
 
   if (/_filament_|_material_|_color_|ams_/i.test(entity_id)) {
+    await handleTrayInventoryChange(entity_id);
     await maybeNotifyFilamentChange(prefix);
   }
+}
+
+async function findPrinterByPrefix(printerPrefix: string) {
+  const prisma = getPrismaClient();
+  if (!prisma) return null;
+  const printer = await prisma.printer.findFirst({
+    where: {
+      OR: [
+        { entityPrefix: { contains: printerPrefix } },
+        { haDeviceId: { contains: printerPrefix } },
+      ],
+    },
+  });
+  if (printer) return printer;
+  const printers = await prisma.printer.findMany({ where: { isActive: true } });
+  return printers.length === 1 ? printers[0] : null;
+}
+
+async function handleActiveTrayChange(entityId: string, newState: Record<string, unknown>): Promise<void> {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+
+  const printerPrefix = entityId.replace(/^sensor\./, '').replace(/_active_tray$/, '');
+  const printer = await findPrinterByPrefix(printerPrefix);
+  if (!printer) return;
+
+  await upsertActiveSlotFromHAState(prisma, printer, {
+    entity_id: entityId,
+    state: String(newState.state ?? ''),
+    attributes: (newState.attributes as Record<string, unknown>) ?? {},
+  });
+
+  const tracked = trackedPrintStates.get(printerPrefix);
+  if (tracked?.printJobId) {
+    const currentUsed = await readCurrentPrintUsedGrams(printer, printerPrefix);
+    const usage = accumulateTrackedSlotUsage(tracked, currentUsed);
+    if (usage) await persistLiveSlotUsage(prisma, printer.id, tracked.printJobId, usage);
+    tracked.activeSlot = activeSlotFromAttributes((newState.attributes as Record<string, unknown>) ?? {});
+    tracked.lastWeightGrams = currentUsed;
+    trackedPrintStates.set(printerPrefix, tracked);
+  }
+
+  const activeSlot = await prisma.printerSlot.findFirst({ where: { printerId: printer.id, isActive: true } });
+  if (activeSlot && !activeSlot.isEmpty && !activeSlot.spoolId) {
+    if (!(await isNotificationEnabled('notify_unassigned_active_tray_enabled'))) return;
+    const key = `unassigned_active_tray_notified_${printer.id}_${activeSlot.id}`;
+    const last = await prisma.setting.findUnique({ where: { key } });
+    const lastAt = last ? Number(last.value) : 0;
+    if (!Number.isFinite(lastAt) || Date.now() - lastAt > 30 * 60 * 1000) {
+      await sendNotification(
+        'Active AMS tray has no spool',
+        `${printer.name} is using ${activeSlot.slotLabel}, but no spool is assigned in SpoolTracker.`,
+      );
+      await prisma.setting.upsert({
+        where: { key },
+        update: { value: String(Date.now()) },
+        create: { key, value: String(Date.now()) },
+      });
+    }
+  }
+}
+
+async function handleTrayInventoryChange(entityId: string): Promise<void> {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  const normalized = entityId.replace(/^sensor\./, '');
+  const printers = await prisma.printer.findMany();
+  const printer = printers.find((p) => {
+    const prefix = p.entityPrefix || p.haDeviceId;
+    return prefix && normalized.toLowerCase().includes(prefix.toLowerCase());
+  });
+  if (!printer) return;
+  await syncPrinterSlotsFromHA(prisma, printer);
 }
 
 async function maybeNotifyFilamentChange(printerPrefix: string): Promise<void> {
@@ -251,7 +350,7 @@ async function handlePrintProgressChange(
   const prefix = entityId.replace(/^sensor\./, '').replace(/_print_progress$/, '');
 
   try {
-    const printer = await prisma.printer.findFirst({
+    let printer = await prisma.printer.findFirst({
       where: {
         OR: [
           { entityPrintProgress: entityId },
@@ -264,6 +363,7 @@ async function handlePrintProgressChange(
         ],
       },
     });
+    if (!printer) printer = await findPrinterByPrefix(prefix);
     if (!printer) return;
 
     const job = await prisma.printJob.findFirst({
@@ -272,10 +372,17 @@ async function handlePrintProgressChange(
     });
     if (!job) return;
 
-    const pfx = printer.entityPrefix || printer.haDeviceId;
-    const weightEntity = printer.entityPrintWeight ?? (pfx ? `sensor.${pfx}_print_weight` : '');
-    const weightRaw = weightEntity ? await fetchEntityState(weightEntity) : null;
-    const grams = parseHaFilamentUsedGrams(weightRaw);
+    const weightData = await readPrintWeightUsages(printer);
+    const grams = weightData.totalGrams;
+
+    const tracked = trackedPrintStates.get(prefix);
+    if (tracked?.printJobId === job.id) {
+      const currentUsed = grams != null ? grams * (pct / 100) : null;
+      const usage = accumulateTrackedSlotUsage(tracked, currentUsed);
+      if (usage) await persistLiveSlotUsage(prisma, printer.id, job.id, usage);
+      tracked.lastWeightGrams = currentUsed;
+      trackedPrintStates.set(prefix, tracked);
+    }
 
     await prisma.printJob.update({
       where: { id: job.id },
@@ -338,6 +445,10 @@ async function onPrintStarted(
     let printer = await prisma.printer.findFirst({
       where: { entityPrefix: { contains: printerPrefix } },
     });
+    if (!printer) {
+      const activePrinters = await prisma.printer.findMany({ where: { isActive: true } });
+      if (activePrinters.length === 1) printer = activePrinters[0];
+    }
 
     if (!printer) {
       printer = await prisma.printer.create({
@@ -372,10 +483,17 @@ async function onPrintStarted(
         haPrintStartMs != null &&
         Math.abs(haPrintStartMs - existingStartedMs) < SAME_PRINT_TIME_TOLERANCE_MS;
       if (samePrintByTime) {
+        const activeSlot = await readActiveSlot(printerPrefix);
+        const currentUsed = await readCurrentPrintUsedGrams(printer, printerPrefix);
+        if (activeSlot && currentUsed != null) {
+          await backfillLiveUsageToActiveSlot(prisma, printer.id, existingInProgress.id, activeSlot, currentUsed);
+        }
         trackedPrintStates.set(printerPrefix, {
           printerId: printer.id,
           lastStatus: 'in_progress',
           printJobId: existingInProgress.id,
+          activeSlot,
+          lastWeightGrams: currentUsed,
         });
         logger.debug(`Skipping duplicate job create: same print start time, existing job ${existingInProgress.id}`);
         return;
@@ -384,10 +502,17 @@ async function onPrintStarted(
         const sameName = (existingInProgress.projectName || '').trim() === (projectName || '').trim();
         const startedRecently = Date.now() - existingStartedMs < 3 * 60 * 1000;
         if (sameName || startedRecently) {
+          const activeSlot = await readActiveSlot(printerPrefix);
+          const currentUsed = await readCurrentPrintUsedGrams(printer, printerPrefix);
+          if (activeSlot && currentUsed != null) {
+            await backfillLiveUsageToActiveSlot(prisma, printer.id, existingInProgress.id, activeSlot, currentUsed);
+          }
           trackedPrintStates.set(printerPrefix, {
             printerId: printer.id,
             lastStatus: 'in_progress',
             printJobId: existingInProgress.id,
+            activeSlot,
+            lastWeightGrams: currentUsed,
           });
           logger.debug(`Skipping duplicate job create: no print-start entity, using name/recent fallback, job ${existingInProgress.id}`);
           return;
@@ -401,6 +526,7 @@ async function onPrintStarted(
     }
 
     const initialProgress = parseProgressPercent(await fetchEntityState(printProgressEntity));
+    const totalGrams = parseHaFilamentUsedGrams(printWeight);
 
     const job = await prisma.printJob.create({
       data: {
@@ -427,7 +553,13 @@ async function onPrintStarted(
       printerId: printer.id,
       lastStatus: 'in_progress',
       printJobId: job.id,
+      activeSlot: await readActiveSlot(printerPrefix),
+      lastWeightGrams: totalGrams != null && initialProgress != null ? totalGrams * (initialProgress / 100) : 0,
     });
+    const tracked = trackedPrintStates.get(printerPrefix);
+    if (tracked?.activeSlot && tracked.lastWeightGrams != null && tracked.lastWeightGrams > 0) {
+      await backfillLiveUsageToActiveSlot(prisma, printer.id, job.id, tracked.activeSlot, tracked.lastWeightGrams);
+    }
 
     logger.info(`Print started: "${projectName}" on ${printer.name}`);
   } catch (error) {
@@ -450,11 +582,15 @@ async function onPrintFinished(
     const printerRecord = printerId
       ? await prisma.printer.findUnique({ where: { id: printerId }, include: { activeSpool: true } })
       : await prisma.printer.findFirst({ where: { entityPrefix: { contains: printerPrefix } }, include: { activeSpool: true } });
+    const resolvedPrinterRecord = printerRecord ?? await (async () => {
+      const activePrinters = await prisma.printer.findMany({ where: { isActive: true }, include: { activeSpool: true } });
+      return activePrinters.length === 1 ? activePrinters[0] : null;
+    })();
 
-    if (!jobId && printerRecord) {
+    if (!jobId && resolvedPrinterRecord) {
       // Fallback: find most recent in-progress job for this printer (e.g. after restart or lost WS state).
       const latestJob = await prisma.printJob.findFirst({
-        where: { printerId: printerRecord.id, status: 'in_progress' },
+        where: { printerId: resolvedPrinterRecord.id, status: 'in_progress' },
         orderBy: { startedAt: 'desc' },
       });
       if (!latestJob) {
@@ -468,12 +604,27 @@ async function onPrintFinished(
       logger.warn(`No tracked print job and no printer record for prefix: ${printerPrefix}`);
       return;
     }
-    const printWeightEntity = printerRecord?.entityPrintWeight ?? `sensor.${printerPrefix}_print_weight`;
-    const printWeight = await fetchEntityState(printWeightEntity);
-    const filamentUsed = printWeight ? parseFloat(printWeight) : null;
+    const printWeightData = resolvedPrinterRecord
+      ? await readPrintWeightUsages(resolvedPrinterRecord)
+      : { totalGrams: null, usages: [] };
+    if (tracked) {
+      const usage = accumulateTrackedSlotUsage(tracked, printWeightData.totalGrams);
+      if (usage && resolvedPrinterRecord) await persistLiveSlotUsage(prisma, resolvedPrinterRecord.id, jobId, usage);
+    }
+    const persistedUsages = await prisma.printJobSpoolUsage.findMany({ where: { printJobId: jobId } });
+    const trackedUsages: SlotUsage[] = persistedUsages.map((u) => ({
+      sourceType: u.sourceType,
+      amsIndex: u.amsIndex,
+      trayIndex: u.trayIndex,
+      slotLabel: u.slotLabel ?? slotLabel({ sourceType: u.sourceType, amsIndex: u.amsIndex, trayIndex: u.trayIndex }),
+      gramsUsed: u.gramsUsed,
+      metersUsed: u.metersUsed ?? undefined,
+    }));
+    const usageRows = printWeightData.usages.length > 0 ? printWeightData.usages : trackedUsages;
+    const filamentUsed = printWeightData.totalGrams;
 
     const currentJob = await prisma.printJob.findUnique({ where: { id: jobId }, select: { spoolId: true } });
-    const spoolToDeduct = currentJob?.spoolId ?? printerRecord?.activeSpoolId ?? null;
+    const spoolToDeduct = currentJob?.spoolId ?? resolvedPrinterRecord?.activeSpoolId ?? null;
 
     const job = await prisma.printJob.update({
       where: { id: jobId },
@@ -488,7 +639,27 @@ async function onPrintFinished(
     });
 
     const effectiveSpoolId = job.spoolId ?? spoolToDeduct;
-    if (!failed && effectiveSpoolId && filamentUsed) {
+    const multiDeduction = resolvedPrinterRecord
+      ? await applyMultiSpoolDeduction(prisma, {
+          printJobId: job.id,
+          printer: resolvedPrinterRecord,
+          totalGrams: filamentUsed,
+          usages: usageRows,
+          fallbackSpoolId: effectiveSpoolId,
+          failed,
+        })
+      : null;
+
+    if (multiDeduction?.primarySpoolId && job.spoolId == null) {
+      await prisma.printJob.update({
+        where: { id: job.id },
+        data: { spoolId: multiDeduction.primarySpoolId },
+      });
+    }
+
+    const handledBySlotUsage = (multiDeduction?.usageCount ?? 0) > 0;
+
+    if (!handledBySlotUsage && !failed && effectiveSpoolId && filamentUsed) {
       const spool = await prisma.spool.findUnique({ where: { id: effectiveSpoolId } });
       if (spool) {
         const newWeight = Math.max(0, spool.remainingWeight - filamentUsed);
@@ -503,16 +674,18 @@ async function onPrintFinished(
         if (newWeight <= threshold) {
           await sendNotification(
             `Low Filament: ${spool.name}`,
-            `Spool "${spool.name}" has only ${Math.round(newWeight)}g remaining (threshold: ${threshold}g).`
+            `Spool "${spool.name}" has only ${Math.round(newWeight)}g remaining (threshold: ${threshold}g).`,
+            'notify_low_filament_enabled',
           );
         }
       }
     }
 
-    if (!effectiveSpoolId) {
+    if (!effectiveSpoolId && (multiDeduction?.deductedCount ?? 0) === 0) {
       await sendNotification(
         'Unassigned Print Job',
-        `Print job "${job.projectName}" completed but has no spool assigned. Assign a spool to printer "${printerRecord?.name ?? 'this printer'}" or to the print job in SpoolTracker.`
+        `Print job "${job.projectName}" completed but has no spool assigned. Assign a spool to printer "${resolvedPrinterRecord?.name ?? 'this printer'}" or to the print job in SpoolTracker.`,
+        'notify_unassigned_completed_jobs_enabled',
       );
     }
 
@@ -541,6 +714,7 @@ async function reconcileInProgressJobs(): Promise<void> {
     for (const job of inProgress) {
       const printer = job.printer;
       if (!printer) continue;
+      await commitUndeductedUsageRows(prisma, job.id);
       const prefix = printer.entityPrefix || printer.haDeviceId;
       if (!prefix) continue;
       const statusEntity = printer.entityPrintStatus ?? `sensor.${prefix}_print_status`;
@@ -578,43 +752,206 @@ async function reconcileInProgressJobs(): Promise<void> {
   }
 }
 
-export async function fetchEntityState(entityId: string): Promise<string | null> {
-  const token = process.env.SUPERVISOR_TOKEN;
-  if (!token) return null;
+async function reconcileActivePrints(): Promise<void> {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
 
   try {
-    const response = await fetch(`${getHABaseUrl()}/api/states/${entityId}`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const states = await fetchHAStates();
+    const runningStatuses = states.filter((s) => {
+      const id = s.entity_id.toLowerCase();
+      const state = String(s.state ?? '').toLowerCase();
+      return id.endsWith('_print_status') && (state === 'running' || state === 'printing');
     });
-    if (!response.ok) return null;
-    const data = await response.json() as { state?: string };
-    return data.state === 'unknown' || data.state === 'unavailable' ? null : data.state ?? null;
-  } catch {
-    return null;
+
+    for (const statusState of runningStatuses) {
+      const prefix = statusState.entity_id.replace(/^sensor\./, '').replace(/_print_status$/, '');
+      const printer = await findPrinterByPrefix(prefix);
+      if (!printer) continue;
+
+      const existing = await prisma.printJob.findFirst({
+        where: { printerId: printer.id, status: 'in_progress' },
+        orderBy: { startedAt: 'desc' },
+      });
+      if (existing) {
+        const totalGrams = parseHaFilamentUsedGrams(await fetchEntityState(`sensor.${prefix}_print_weight`));
+        const progress = parseProgressPercent(await fetchEntityState(`sensor.${prefix}_print_progress`));
+        const activeSlot = await readActiveSlot(prefix);
+        const currentUsed = totalGrams != null && progress != null ? totalGrams * (progress / 100) : null;
+        if (activeSlot && currentUsed != null) {
+          await backfillLiveUsageToActiveSlot(prisma, printer.id, existing.id, activeSlot, currentUsed);
+          await commitUndeductedUsageRows(prisma, existing.id);
+        }
+        trackedPrintStates.set(prefix, {
+          printerId: printer.id,
+          lastStatus: 'in_progress',
+          printJobId: existing.id,
+          activeSlot,
+          lastWeightGrams: currentUsed,
+        });
+        continue;
+      }
+
+      logger.info(`Reconciliation: HA reports active print for ${prefix}; creating in-progress job.`);
+      await onPrintStarted(prisma, prefix, statusState.entity_id);
+    }
+  } catch (err) {
+    logger.error('Failed to reconcile active prints from HA:', err);
   }
+}
+
+export async function fetchEntityState(entityId: string): Promise<string | null> {
+  return fetchHAEntityState(entityId);
+}
+
+function activeSlotFromAttributes(attrs: Record<string, unknown>): SlotIdentity | null {
+  const amsRaw = Number(attrs.ams_index);
+  const trayRaw = Number(attrs.tray_index);
+  if (!Number.isFinite(trayRaw)) return null;
+  const sourceType = amsRaw === 255 || /external/i.test(String(attrs.name ?? '')) ? 'external' : 'ams';
+  const amsIndex = sourceType === 'external' ? -1 : (Number.isFinite(amsRaw) ? amsRaw : 0);
+  const trayIndex = trayRaw;
+  return { sourceType, amsIndex, trayIndex, slotLabel: slotLabel({ sourceType, amsIndex, trayIndex }) };
+}
+
+async function readActiveSlot(printerPrefix: string): Promise<SlotIdentity | null> {
+  const raw = await fetchHAState(`sensor.${printerPrefix}_active_tray`);
+  return activeSlotFromAttributes(raw?.attributes ?? {});
+}
+
+function accumulateTrackedSlotUsage(
+  tracked: TrackedPrintState,
+  currentWeightGrams: number | null,
+): SlotUsage | null {
+  if (!tracked.activeSlot || currentWeightGrams == null || tracked.lastWeightGrams == null) return null;
+  const delta = currentWeightGrams - tracked.lastWeightGrams;
+  if (!Number.isFinite(delta) || delta <= 0) return null;
+  return {
+    ...tracked.activeSlot,
+    gramsUsed: delta,
+  };
+}
+
+async function readCurrentPrintUsedGrams(
+  printer: NonNullable<Awaited<ReturnType<typeof findPrinterByPrefix>>>,
+  printerPrefix: string,
+): Promise<number | null> {
+  const [weightData, progressRaw] = await Promise.all([
+    readPrintWeightUsages(printer),
+    fetchEntityState(`sensor.${printerPrefix}_print_progress`),
+  ]);
+  const progress = parseProgressPercent(progressRaw);
+  if (weightData.totalGrams == null || progress == null) return null;
+  return weightData.totalGrams * (progress / 100);
+}
+
+async function persistLiveSlotUsage(
+  prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
+  printerId: string,
+  printJobId: string,
+  usage: SlotUsage,
+): Promise<void> {
+  if (usage.gramsUsed <= 0) return;
+
+  const slot = await prisma.printerSlot.findUnique({
+    where: {
+      printerId_sourceType_amsIndex_trayIndex: {
+        printerId,
+        sourceType: usage.sourceType,
+        amsIndex: usage.amsIndex,
+        trayIndex: usage.trayIndex,
+      },
+    },
+  });
+  const spoolId = slot?.spoolId ?? null;
+
+  const where = {
+    printJobId_sourceType_amsIndex_trayIndex: {
+      printJobId,
+      sourceType: usage.sourceType,
+      amsIndex: usage.amsIndex,
+      trayIndex: usage.trayIndex,
+    },
+  };
+
+  await prisma.$transaction(async (tx) => {
+    const deductionMode = await tx.setting.findUnique({ where: { key: 'deduction_mode' } });
+    const deductDuringPrint = (deductionMode?.value ?? 'during_print') !== 'on_completion';
+    const existing = await tx.printJobSpoolUsage.findUnique({ where });
+    const undeductedExisting = existing && !existing.deductedAt ? existing.gramsUsed : 0;
+    const deductAmount = deductDuringPrint && spoolId ? undeductedExisting + usage.gramsUsed : 0;
+    const deductedAt = deductDuringPrint && spoolId ? new Date() : null;
+
+    await tx.printJobSpoolUsage.upsert({
+      where,
+      create: {
+        printJobId,
+        spoolId,
+        slotId: slot?.id ?? null,
+        sourceType: usage.sourceType,
+        amsIndex: usage.amsIndex,
+        trayIndex: usage.trayIndex,
+        slotLabel: usage.slotLabel,
+        gramsUsed: usage.gramsUsed,
+        deductedAt,
+      },
+      update: {
+        spoolId,
+        slotId: slot?.id ?? null,
+        slotLabel: usage.slotLabel,
+        gramsUsed: { increment: usage.gramsUsed },
+        deductedAt,
+      },
+    });
+
+    if (spoolId && deductAmount > 0) {
+      const spool = await tx.spool.findUnique({ where: { id: spoolId } });
+      if (spool) {
+        await tx.spool.update({
+          where: { id: spoolId },
+          data: { remainingWeight: Math.max(0, spool.remainingWeight - deductAmount) },
+        });
+        await tx.spoolAuditLog.create({
+          data: {
+            spoolId,
+            printJobId,
+            usageId: existing?.id ?? null,
+            action: 'deduct',
+            reason: usage.slotLabel,
+            deltaGrams: -deductAmount,
+            beforeWeight: spool.remainingWeight,
+            afterWeight: Math.max(0, spool.remainingWeight - deductAmount),
+          },
+        });
+        logger.info(`Deducted ${deductAmount}g from "${spool.name}" for ${usage.slotLabel}`);
+      }
+    }
+  });
+}
+
+async function backfillLiveUsageToActiveSlot(
+  prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
+  printerId: string,
+  printJobId: string,
+  activeSlot: SlotIdentity,
+  currentUsedGrams: number,
+): Promise<void> {
+  const aggregate = await prisma.printJobSpoolUsage.aggregate({
+    where: { printJobId },
+    _sum: { gramsUsed: true },
+  });
+  const persisted = aggregate._sum.gramsUsed ?? 0;
+  const missing = currentUsedGrams - persisted;
+  if (!Number.isFinite(missing) || missing <= 0.01) return;
+  await persistLiveSlotUsage(prisma, printerId, printJobId, {
+    ...activeSlot,
+    gramsUsed: missing,
+  });
 }
 
 /** Fetch state or a specific attribute. attribute "state" or omitted = entity state; else attributes[attribute]. */
 async function fetchEntityValue(entityId: string, attribute?: string): Promise<string | null> {
-  const token = process.env.SUPERVISOR_TOKEN;
-  if (!token) return null;
-  const attr = attribute ?? 'state';
-  try {
-    const normalized = entityId.toLowerCase();
-    const response = await fetch(`${getHABaseUrl()}/api/states/${encodeURIComponent(normalized)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!response.ok) return null;
-    const data = await response.json() as { state?: string; attributes?: Record<string, unknown> };
-    if (attr === 'state') {
-      const state = data.state;
-      return state === 'unknown' || state === 'unavailable' || state === undefined ? null : (state ?? null);
-    }
-    const v = data.attributes?.[attr];
-    return typeof v === 'string' ? v : (v != null ? String(v) : null);
-  } catch {
-    return null;
-  }
+  return fetchHAEntityValue(entityId, attribute);
 }
 
 export function stopHAIntegration(): void {

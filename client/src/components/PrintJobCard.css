@@ -170,6 +170,67 @@
   text-decoration: underline;
 }
 
+.print-job-usage-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.print-job-usage-stack {
+  flex: 1 1 140px;
+  min-width: 140px;
+  max-width: 280px;
+  height: 12px;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.print-job-usage-stack span {
+  min-width: 4px;
+}
+
+.print-job-usage-pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 7px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.print-job-usage-summary {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border: 1px solid rgba(63, 185, 80, 0.35);
+  border-radius: var(--radius-sm);
+  background: rgba(35, 134, 54, 0.14);
+  color: #3fb950;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.print-job-usage-correct {
+  margin-left: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--accent-primary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
 @media (max-width: 768px) {
   .print-job-card {
     flex-direction: column;

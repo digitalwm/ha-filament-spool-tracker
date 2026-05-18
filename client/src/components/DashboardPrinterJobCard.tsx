@@ -76,9 +76,10 @@ export interface DashboardPrinterJobCardProps {
   live?: { eta: string | null; filamentGrams: string | null } | null;
   /** Grams left on the spool loaded on this printer (dashboard row). */
   loadedSpoolRemainingGrams?: number | null;
+  deductionMode?: string | null;
 }
 
-export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainingGrams }: DashboardPrinterJobCardProps) {
+export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainingGrams, deductionMode }: DashboardPrinterJobCardProps) {
   if (!job) {
     return (
       <div className="dashboard-printer-job-card dashboard-printer-job-card--idle">
@@ -100,15 +101,17 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
   const pPct = hasProgress ? Math.min(100, Math.max(0, progress)) : null;
   const usedGramsRounded =
     totalGrams != null && pPct != null ? Math.round(totalGrams * (pPct / 100)) : null;
+  const remainingJobGrams =
+    totalGrams != null && pPct != null ? Math.max(0, totalGrams - (totalGrams * (pPct / 100))) : null;
 
   const spoolLessThanJobTotal =
     loadedSpoolRemainingGrams != null &&
-    totalGrams != null &&
-    loadedSpoolRemainingGrams < totalGrams;
+    remainingJobGrams != null &&
+    loadedSpoolRemainingGrams < remainingJobGrams;
 
   const spoolShortTitle =
-    spoolLessThanJobTotal && loadedSpoolRemainingGrams != null && totalGrams != null
-      ? `Loaded spool has ${Math.round(loadedSpoolRemainingGrams)}g left, less than this job total (${Math.round(totalGrams)}g).`
+    spoolLessThanJobTotal && loadedSpoolRemainingGrams != null && remainingJobGrams != null
+      ? `Loaded spool has ${Math.round(loadedSpoolRemainingGrams)}g left, less than the estimated remaining print usage (${Math.round(remainingJobGrams)}g).`
       : undefined;
 
   const startedTitle = (() => {
@@ -116,6 +119,7 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
     if (Number.isNaN(d.getTime())) return undefined;
     return d.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' });
   })();
+  const multiSpoolUsages = (job.spoolUsages ?? []).filter((u) => u.gramsUsed > 0);
 
   return (
     <div
@@ -184,11 +188,28 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
               {Math.round(totalGrams)}g total
             </span>
           )}
+          {remainingJobGrams != null && (
+            <span className={`meta-item ${spoolLessThanJobTotal ? 'dashboard-printer-job-short-text' : ''}`}>
+              {Math.round(remainingJobGrams)}g left to print
+            </span>
+          )}
           <span className="meta-item">ETA {eta}</span>
+          <span className="meta-item" title="Filament deduction mode">
+            {deductionMode === 'on_completion' ? 'Deducts on finish' : 'Deducts live'}
+          </span>
           <span className="meta-item meta-date" title={startedTitle}>
             {formatMetaDate(job.startedAt)}
           </span>
         </div>
+        {multiSpoolUsages.length > 0 && (
+          <div className="dashboard-printer-job-usage">
+            {multiSpoolUsages.map((usage) => (
+              <span key={usage.id} className="dashboard-printer-job-usage-pill">
+                {usage.spool?.name ?? usage.slotLabel ?? 'Slot'}: {Math.round(usage.gramsUsed)}g
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

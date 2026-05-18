@@ -1,35 +1,26 @@
-# Optional: PostgreSQL for development (the app works without it using SQLite)
-version: '3.8'
+# Run SpoolTracker in Docker outside Hass.io, connected to an existing Home Assistant.
+# 1. Create a Long-Lived Access Token in HA (Profile → Security → Long-Lived Access Tokens).
+# 2. Set HOME_ASSISTANT_URL and SUPERVISOR_TOKEN below or in .env.
+# 3. Use entrypoint: [] so the base image's /init does not strip env vars.
+# 4. docker compose -f docker-compose.standalone.yml up -d
+# 5. Open http://localhost:3000
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: addon-db
+  spooltracker:
+    build: .
+    image: ha-filament-spooltracker:latest
+    container_name: spooltracker
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: addon_db
-      POSTGRES_USER: addon_user
-      POSTGRES_PASSWORD: addon_password
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    entrypoint: []
     ports:
-      - "5432:5432"
+      - "3000:3000"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U addon_user -d addon_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  adminer:
-    image: adminer:4.8.1
-    container_name: addon-db-adminer
-    restart: unless-stopped
-    ports:
-      - "8081:8080"
-    depends_on:
-      - postgres
-
-volumes:
-  postgres_data:
-    driver: local
+      # Bind mount keeps DB and cache on host (e.g. ./data/app.db); override with DATA_PATH in .env
+      - ${DATA_PATH:-./data}:/data
+    environment:
+      HOME_ASSISTANT_URL: ${HOME_ASSISTANT_URL}
+      SUPERVISOR_TOKEN: ${SUPERVISOR_TOKEN}
+      PORT: ${PORT:-3000}
+      # DATABASE_URL: ${DATABASE_URL:-file:/data/app.db}
+      # LOG_LEVEL: ${LOG_LEVEL:-info}
+    command: ["/run-standalone.sh"]

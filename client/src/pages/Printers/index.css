@@ -210,6 +210,127 @@
   border-color: var(--accent-primary);
 }
 
+.printer-card-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-color);
+}
+
+.printer-card-slots-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.printer-slot-health {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
+.printer-entity-health {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.printer-entity-health span {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  background: var(--bg-primary);
+}
+
+.printer-slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.printer-slot-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 220px);
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.printer-slot-warning,
+.printer-slot-suggestions {
+  grid-column: 1 / -1;
+}
+
+.printer-slot-warning {
+  color: var(--warning-color);
+  font-size: 11px;
+}
+
+.printer-slot-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.printer-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-color);
+}
+
+.printer-timeline-event {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.printer-timeline-event-warning {
+  color: var(--warning-color);
+}
+
+.printer-slot-row-active {
+  border-color: var(--accent-primary);
+}
+
+.printer-slot-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.printer-slot-label {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.printer-slot-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.printer-slot-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
 .printer-card-actions {
   flex-shrink: 0;
   display: flex;
@@ -255,6 +376,10 @@
   }
 
   .printer-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .printer-slot-row {
     grid-template-columns: 1fr;
   }
 }

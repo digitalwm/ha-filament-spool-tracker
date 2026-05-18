@@ -5,6 +5,8 @@ import type { SpoolCreateRequest, SpoolUpdateRequest, DeductionRequest } from '@
 import { normalizeSpoolColorStyle } from '@ha-addon/types';
 import { publishAllSpooltrackerHASensors } from '../services/haSensors';
 import { assignActiveSpoolToPrinter, AssignSpoolError } from '../services/assignActiveSpool';
+import { getLiveUsedBySpoolId } from '../services/liveSpoolUsage';
+import { adjustSpoolWeight } from '../services/spoolUsageCommit';
 
 const logger = LOG('SPOOLS');
 const router: Router = Router();
@@ -39,8 +41,13 @@ router.get('/spools', async (req: Request, res: Response) => {
         .filter((p) => p.activeSpoolId != null)
         .map((p) => [p.activeSpoolId!, { id: p.id, name: p.name }])
     );
+    const liveUsedBySpoolId = await getLiveUsedBySpoolId(prisma);
     const result = spools.map((s) => ({
       ...s,
+      liveFilamentUsed: liveUsedBySpoolId[s.id] ?? 0,
+      liveRemainingWeight: (liveUsedBySpoolId[s.id] ?? 0) > 0
+        ? Math.max(0, s.remainingWeight - (liveUsedBySpoolId[s.id] ?? 0))
+        : undefined,
       loadedOnPrinter: loadedOnBySpoolId[s.id] ?? null,
     }));
     res.json(result);
@@ -60,10 +67,67 @@ router.get('/spools/:id', async (req: Request, res: Response) => {
       include: { printJobs: { orderBy: { startedAt: 'desc' }, take: 10 } },
     });
     if (!spool) return res.status(404).json({ error: 'Spool not found' });
-    res.json(spool);
+    const liveUsedBySpoolId = await getLiveUsedBySpoolId(prisma);
+    const liveUsed = liveUsedBySpoolId[spool.id] ?? 0;
+    res.json({
+      ...spool,
+      liveFilamentUsed: liveUsed,
+      liveRemainingWeight: liveUsed > 0 ? Math.max(0, spool.remainingWeight - liveUsed) : undefined,
+    });
   } catch (error) {
     logger.error('Failed to fetch spool:', error);
     res.status(500).json({ error: 'Failed to fetch spool' });
+  }
+});
+
+router.get('/spools/:id/audit', async (req: Request, res: Response) => {
+  const prisma = getPrismaClient();
+  if (!prisma) return res.status(503).json({ error: 'Database not available' });
+
+  try {
+    const logs = await prisma.spoolAuditLog.findMany({
+      where: { spoolId: req.params.id as string },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    res.json(logs);
+  } catch (error) {
+    logger.error('Failed to fetch spool audit log:', error);
+    res.status(500).json({ error: 'Failed to fetch spool audit log' });
+  }
+});
+
+router.post('/spools/:id/audit/:logId/undo', async (req: Request, res: Response) => {
+  const prisma = getPrismaClient();
+  if (!prisma) return res.status(503).json({ error: 'Database not available' });
+
+  try {
+    const spoolId = req.params.id as string;
+    const logId = req.params.logId as string;
+    const log = await prisma.spoolAuditLog.findFirst({ where: { id: logId, spoolId } });
+    if (!log) return res.status(404).json({ error: 'Audit log not found' });
+    if (log.action.startsWith('undo_')) return res.status(400).json({ error: 'Undo entries cannot be undone' });
+
+    const alreadyUndone = await prisma.spoolAuditLog.findFirst({
+      where: { spoolId, action: `undo_${log.action}`, metadataJson: { contains: log.id } },
+    });
+    if (alreadyUndone) return res.status(400).json({ error: 'Audit entry already undone' });
+
+    await adjustSpoolWeight(prisma, {
+      spoolId,
+      deltaGrams: -log.deltaGrams,
+      action: `undo_${log.action}`,
+      reason: `Undo ${log.reason ?? log.action}`,
+      printJobId: log.printJobId,
+      usageId: log.usageId,
+      metadata: { originalAuditId: log.id },
+    });
+    const updated = await prisma.spool.findUniqueOrThrow({ where: { id: spoolId } });
+    await publishAllSpooltrackerHASensors();
+    res.json(updated);
+  } catch (error) {
+    logger.error('Failed to undo audit log:', error);
+    res.status(500).json({ error: 'Failed to undo audit log' });
   }
 });
 
@@ -159,11 +223,13 @@ router.post('/spools/:id/deduct', async (req: Request, res: Response) => {
     const spool = await prisma.spool.findUnique({ where: { id: req.params.id as string } });
     if (!spool) return res.status(404).json({ error: 'Spool not found' });
 
-    const newWeight = Math.max(0, spool.remainingWeight - amount);
-    const updated = await prisma.spool.update({
-      where: { id: req.params.id as string },
-      data: { remainingWeight: newWeight },
+    await adjustSpoolWeight(prisma, {
+      spoolId: spool.id,
+      deltaGrams: -amount,
+      action: 'manual_deduct',
+      reason: req.body?.reason ?? null,
     });
+    const updated = await prisma.spool.findUniqueOrThrow({ where: { id: spool.id } });
     await publishAllSpooltrackerHASensors();
     res.json(updated);
   } catch (error) {

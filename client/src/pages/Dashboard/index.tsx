@@ -59,11 +59,12 @@ export default function DashboardPage() {
   const handlePrinterLoadedSpoolChange = async (printer: Printer, activeSpoolId: string | null) => {
     if (!stats) return;
     try {
-      const res = await printersApi.update(printer.id, { activeSpoolId });
-      setStats({
-        ...stats,
-        printersList: stats.printersList.map((p) => (p.id === printer.id ? res.data : p)),
-      });
+      if (printer.displaySlot?.id) {
+        await printersApi.updateSlot(printer.id, printer.displaySlot.id, { spoolId: activeSpoolId });
+      } else {
+        await printersApi.update(printer.id, { activeSpoolId });
+      }
+      await fetchStats();
     } catch {
       fetchStats();
     }
@@ -89,6 +90,22 @@ export default function DashboardPage() {
 
   return (
     <div className="dashboard">
+      <div className="dashboard-status-row">
+        <span className="dashboard-mode-pill">
+          {stats.deductionMode === 'on_completion' ? 'Deduction: on completion' : 'Deduction: live during print'}
+        </span>
+        {(stats.dashboardWarnings ?? []).map((warning) => (
+          <button
+            key={`${warning.type}-${warning.slotId}`}
+            type="button"
+            className="dashboard-warning-banner"
+            onClick={() => navigate(`/printers?focus=${encodeURIComponent(warning.printerId)}`)}
+          >
+            {warning.printerName} is using {warning.slotLabel}, but no spool is assigned.
+          </button>
+        ))}
+      </div>
+
       <div className="stats-grid">
         <button
           type="button"
@@ -137,50 +154,57 @@ export default function DashboardPage() {
           <h3 className="section-title">Active Spools</h3>
           <div className="active-spools-grid">
             {stats.printersList.map((printer) => (
+              (() => {
+                const shownSpool = printer.displaySpool ?? printer.activeSpool ?? null;
+                const shownRemaining = shownSpool?.liveRemainingWeight ?? shownSpool?.remainingWeight ?? null;
+                return (
               <div key={printer.id} className="printer-dashboard-row">
                 <div className="printer-with-spool-card">
                   <span className="printer-with-spool-name">{printer.name}</span>
+                  {printer.displaySlot && (
+                    <span className="printer-with-spool-slot">{printer.displaySlot.slotLabel}</span>
+                  )}
                   <SpoolSelect
-                    value={printer.activeSpoolId ?? null}
+                    value={shownSpool?.id ?? null}
                     onChange={(id) => handlePrinterLoadedSpoolChange(printer, id)}
                     spools={stats.spoolsList ?? []}
                     placeholder="Select spool…"
                     size="sm"
-                    className={printer.activeSpool ? '' : 'spool-select-empty'}
-                    aria-label={printer.activeSpool ? 'Change loaded spool' : 'Select loaded spool'}
-                    renderTrigger={() => (printer.activeSpool ? (
+                    className={shownSpool ? '' : 'spool-select-empty'}
+                    aria-label={shownSpool ? 'Change loaded spool' : 'Select loaded spool'}
+                    renderTrigger={() => (shownSpool ? (
                       <div className="active-spool-trigger-content">
                         <div className="active-spool-header">
                           <SpoolColorSwatch
                             className="active-spool-dot"
-                            colorHex={printer.activeSpool.colorHex}
-                            colorStyle={printer.activeSpool.colorStyle}
-                            colorName={printer.activeSpool.color}
+                            colorHex={shownSpool.colorHex}
+                            colorStyle={shownSpool.colorStyle}
+                            colorName={shownSpool.color}
                           />
                           <div className="active-spool-info">
-                            <span className="active-spool-name">{printer.activeSpool.name}</span>
+                            <span className="active-spool-name">{shownSpool.name}</span>
                             <SpoolMetaBadges
-                              filamentType={printer.activeSpool.filamentType}
-                              colorStyle={printer.activeSpool.colorStyle}
+                              filamentType={shownSpool.filamentType}
+                              colorStyle={shownSpool.colorStyle}
                             />
                           </div>
                           <a
-                            href={`/spools/${printer.activeSpool.id}`}
+                            href={`/spools/${shownSpool.id}`}
                             className="active-spool-view-link"
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              navigate(`/spools/${printer.activeSpool!.id}`);
+                              navigate(`/spools/${shownSpool.id}`);
                             }}
                           >
                             View
                           </a>
                         </div>
                         <div className="active-spool-weight">
-                          <span className="active-spool-remaining">{Math.round(printer.activeSpool.remainingWeight)}g</span>
-                          <span className="active-spool-total"> / {Math.round(printer.activeSpool.initialWeight)}g</span>
+                          <span className="active-spool-remaining">{Math.round(shownRemaining ?? 0)}g</span>
+                          <span className="active-spool-total"> / {Math.round(shownSpool.initialWeight)}g</span>
                         </div>
-                        <ProgressBar value={printer.activeSpool.remainingWeight} max={printer.activeSpool.initialWeight} size="sm" />
+                        <ProgressBar value={shownRemaining ?? 0} max={shownSpool.initialWeight} size="sm" />
                       </div>
                     ) : (
                       <span className="spool-select-placeholder">No spool loaded — click to select</span>
@@ -190,9 +214,12 @@ export default function DashboardPage() {
                 <DashboardPrinterJobCard
                   job={jobByPrinterId.get(printer.id) ?? null}
                   live={liveByPrinter[printer.id]}
-                  loadedSpoolRemainingGrams={printer.activeSpool?.remainingWeight ?? null}
+                  loadedSpoolRemainingGrams={shownRemaining}
+                  deductionMode={stats.deductionMode}
                 />
               </div>
+                );
+              })()
             ))}
           </div>
         </div>

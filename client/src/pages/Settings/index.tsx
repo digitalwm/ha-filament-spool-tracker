@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { settingsApi, haApi } from '@services/api';
+import { settingsApi, haApi, maintenanceApi } from '@services/api';
 import type { HAConnectionStatus } from '@ha-addon/types';
 import { DEFAULT_NEW_SPOOL_WEIGHT_GRAMS, parseDefaultNewSpoolWeightGrams } from '@utils/defaultNewSpoolWeight';
 import './index.css';
@@ -10,8 +10,17 @@ export default function SettingsPage() {
   const [lowThreshold, setLowThreshold] = useState('100');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [filamentChangeNotificationsEnabled, setFilamentChangeNotificationsEnabled] = useState(true);
+  const [notificationPrefs, setNotificationPrefs] = useState<Record<string, boolean>>({
+    notify_low_filament_enabled: true,
+    notify_unassigned_active_tray_enabled: true,
+    notify_unassigned_completed_jobs_enabled: true,
+    notify_expiring_spools_enabled: true,
+    notify_stale_print_jobs_enabled: true,
+  });
   const [defaultNewSpoolWeight, setDefaultNewSpoolWeight] = useState(String(DEFAULT_NEW_SPOOL_WEIGHT_GRAMS));
+  const [deductionMode, setDeductionMode] = useState('during_print');
   const [saving, setSaving] = useState(false);
+  const [maintenanceStatus, setMaintenanceStatus] = useState('');
 
   useEffect(() => {
     const loadAll = async () => {
@@ -32,9 +41,16 @@ export default function SettingsPage() {
             settingsRes.data['filament_change_notifications_enabled'] !== '0',
           );
         }
+        setNotificationPrefs((prev) => Object.fromEntries(
+          Object.keys(prev).map((key) => [
+            key,
+            settingsRes.data[key] == null ? true : settingsRes.data[key] !== 'false' && settingsRes.data[key] !== '0',
+          ]),
+        ));
         setDefaultNewSpoolWeight(
           String(parseDefaultNewSpoolWeightGrams(settingsRes.data['default_new_spool_weight_grams'])),
         );
+        setDeductionMode(settingsRes.data['deduction_mode'] || 'during_print');
       } catch (err) {
         console.error('Failed to load settings:', err);
       }
@@ -49,7 +65,9 @@ export default function SettingsPage() {
         low_filament_threshold: lowThreshold,
         notifications_enabled: notificationsEnabled ? 'true' : 'false',
         filament_change_notifications_enabled: filamentChangeNotificationsEnabled ? 'true' : 'false',
+        ...Object.fromEntries(Object.entries(notificationPrefs).map(([key, value]) => [key, value ? 'true' : 'false'])),
         default_new_spool_weight_grams: String(parseDefaultNewSpoolWeightGrams(defaultNewSpoolWeight)),
+        deduction_mode: deductionMode,
       });
       setSettings(res.data);
     } catch (err) {
@@ -80,6 +98,16 @@ export default function SettingsPage() {
       <div className="settings-section">
         <h3 className="section-title">Printers &amp; Filament</h3>
         <div className="settings-card">
+          <div className="form-group">
+            <label>Filament deduction mode</label>
+            <select value={deductionMode} onChange={(e) => setDeductionMode(e.target.value)} style={{ maxWidth: 260 }}>
+              <option value="during_print">Deduct during print</option>
+              <option value="on_completion">Deduct on completion</option>
+            </select>
+            <span className="form-hint">
+              During-print mode keeps spool remaining weight saved as AMS usage is observed. Completion mode waits until the print finishes.
+            </span>
+          </div>
           <div className="form-group">
             <label className="checkbox-label">
               <input
@@ -112,6 +140,31 @@ export default function SettingsPage() {
       </div>
 
       <div className="settings-section">
+        <h3 className="section-title">Maintenance</h3>
+        <div className="settings-card">
+          <div className="settings-actions">
+            <button className="btn btn-secondary" onClick={async () => {
+              const res = await maintenanceApi.resyncEntities();
+              setMaintenanceStatus(`Resynced ${res.data.updated} printer(s)`);
+            }}>Resync entities</button>
+            <button className="btn btn-secondary" onClick={async () => {
+              const res = await maintenanceApi.commitPending();
+              setMaintenanceStatus(`Committed ${res.data.committed} pending row(s)`);
+            }}>Commit pending rows</button>
+            <button className="btn btn-secondary" onClick={async () => {
+              const res = await maintenanceApi.clearStaleJobs();
+              setMaintenanceStatus(`Marked ${res.data.updated} stale job(s) failed`);
+            }}>Clear stale jobs</button>
+            <button className="btn btn-secondary" onClick={async () => {
+              const res = await maintenanceApi.backfillAudit();
+              setMaintenanceStatus(`Backfilled ${res.data.created} audit row(s)`);
+            }}>Backfill audit</button>
+          </div>
+          {maintenanceStatus && <p className="form-hint">{maintenanceStatus}</p>}
+        </div>
+      </div>
+
+      <div className="settings-section">
         <h3 className="section-title">Notifications</h3>
         <div className="settings-card">
           <div className="form-group">
@@ -140,6 +193,25 @@ export default function SettingsPage() {
             <span className="form-hint">
               Get notified when a spool drops below this weight. Currently: {settings['low_filament_threshold'] || '100'}g
             </span>
+          </div>
+          <div className="notification-pref-grid">
+            {[
+              ['notify_low_filament_enabled', 'Low filament alerts'],
+              ['notify_unassigned_active_tray_enabled', 'Unassigned active tray alerts'],
+              ['notify_unassigned_completed_jobs_enabled', 'Unassigned completed print alerts'],
+              ['notify_expiring_spools_enabled', 'Expiring spool alerts'],
+              ['notify_stale_print_jobs_enabled', 'Stale in-progress print alerts'],
+            ].map(([key, label]) => (
+              <label key={key} className="checkbox-label notification-pref-item">
+                <input
+                  type="checkbox"
+                  checked={notificationPrefs[key] ?? true}
+                  onChange={(e) => setNotificationPrefs((prev) => ({ ...prev, [key]: e.target.checked }))}
+                  disabled={!notificationsEnabled}
+                />
+                {label}
+              </label>
+            ))}
           </div>
         </div>
       </div>

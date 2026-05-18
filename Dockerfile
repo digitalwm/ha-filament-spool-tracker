@@ -24,14 +24,14 @@ COPY --from=node_upstream /usr/local/bin/node /usr/local/bin/node
 COPY --from=node_upstream /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
-    && npm install -g pnpm@8
+    && npm install -g pnpm@10
 
 # ---------------------------------------------------------------------------
 # Build stage — extends base with toolchain only (not shipped in final image).
 # ---------------------------------------------------------------------------
 FROM base AS builder
 
-RUN apk add --no-cache git python3 make g++ && rm -rf /var/cache/apk/*
+RUN apk add --no-cache git python3 py3-setuptools make g++ && rm -rf /var/cache/apk/*
 
 WORKDIR /app
 

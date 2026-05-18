@@ -30,6 +30,7 @@ interface PrintJobCardProps {
   onComplete?: (job: PrintJob) => void;
   /** When set, status is editable via a dropdown (e.g. Print History). */
   onStatusChange?: (job: PrintJob, nextStatus: PrintJobStatus) => void;
+  onUsageCorrect?: (job: PrintJob, usageId: string) => void;
 }
 
 export default function PrintJobCard({
@@ -40,12 +41,17 @@ export default function PrintJobCard({
   onDelete,
   onComplete,
   onStatusChange,
+  onUsageCorrect,
 }: PrintJobCardProps) {
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString(undefined, {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
     });
   };
+
+  const multiSpoolUsages = (job.spoolUsages ?? []).filter((u) => u.gramsUsed > 0);
+  const usageTotal = multiSpoolUsages.reduce((sum, usage) => sum + usage.gramsUsed, 0);
+  const usageColors = ['#ffffff', '#111111', '#808080', '#2d6a4f', '#58a6ff', '#f0883e'];
 
   return (
     <div className="print-job-card">
@@ -138,6 +144,40 @@ export default function PrintJobCard({
           )}
           <span className="meta-item meta-date">{formatDate(job.startedAt)}</span>
         </div>
+        {multiSpoolUsages.length > 0 && (
+          <div className="print-job-usage-list">
+            <div className="print-job-usage-stack" title="Per-spool usage split">
+              {multiSpoolUsages.map((usage, idx) => (
+                <span
+                  key={usage.id}
+                  style={{
+                    width: `${Math.max(4, (usage.gramsUsed / Math.max(usageTotal, 1)) * 100)}%`,
+                    background: usage.spool?.colorHex ?? usageColors[idx % usageColors.length],
+                  }}
+                />
+              ))}
+            </div>
+            <span className="print-job-usage-summary">
+              {job.status === 'completed' ? 'Deducted' : 'Tracked'}: {Math.round(usageTotal)}g
+            </span>
+            {multiSpoolUsages.map((usage) => (
+              <span key={usage.id} className="print-job-usage-pill">
+                {usage.slotLabel ?? 'Slot'}: {Math.round(usage.gramsUsed)}g
+                {usage.spool ? ` · ${usage.spool.name}` : ' · unassigned'}
+                {job.status === 'completed' ? (usage.deductedAt ? ' · saved' : ' · pending') : ''}
+                {onUsageCorrect && (
+                  <button
+                    type="button"
+                    className="print-job-usage-correct"
+                    onClick={() => onUsageCorrect(job, usage.id)}
+                  >
+                    Correct
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

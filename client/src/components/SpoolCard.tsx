@@ -15,7 +15,8 @@ interface SpoolCardProps {
 }
 
 export default function SpoolCard({ spool, onEdit, onDeduct, onArchive, onDelete, onActivate, onNameClick }: SpoolCardProps) {
-  const isLow = spool.remainingWeight <= 100;
+  const displayRemaining = spool.liveRemainingWeight ?? spool.remainingWeight;
+  const isLow = displayRemaining <= 100;
   const isActive = spool.isActive || !!spool.loadedOnPrinter;
 
   const formatDateTime = (dateStr: string) => {
@@ -58,11 +59,11 @@ export default function SpoolCard({ spool, onEdit, onDeduct, onArchive, onDelete
 
       <div className="spool-card-body">
         <div className="spool-weight">
-          <span className="weight-value">{Math.round(spool.remainingWeight)}g</span>
+          <span className="weight-value">{Math.round(displayRemaining)}g</span>
           <span className="weight-separator"> / </span>
           <span className="weight-total">{Math.round(spool.initialWeight)}g</span>
         </div>
-        <ProgressBar value={spool.remainingWeight} max={spool.initialWeight} size="sm" />
+        <ProgressBar value={displayRemaining} max={spool.initialWeight} size="sm" />
         {spool.manufacturer && (
           <span className="spool-manufacturer">{spool.manufacturer}</span>
         )}

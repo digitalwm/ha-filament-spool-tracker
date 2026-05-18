@@ -130,6 +130,30 @@
   flex-shrink: 0;
 }
 
+.dashboard-printer-job-short-text {
+  color: var(--warning-color);
+  font-weight: 600;
+}
+
+.dashboard-printer-job-usage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dashboard-printer-job-usage-pill {
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 @media (max-width: 768px) {
   .dashboard-printer-job-card:not(.dashboard-printer-job-card--idle) {
     min-height: 132px;

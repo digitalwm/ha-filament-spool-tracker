@@ -36,6 +36,7 @@ model Printer {
   updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
 
   activeSpool   Spool?     @relation(fields: [activeSpoolId], references: [id])
+  slots         PrinterSlot[]
   printJobs     PrintJob[]
   @@map("printers")
 }
@@ -61,7 +62,10 @@ model Spool {
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
 
   loadedOnPrinter Printer?
+  loadedSlots     PrinterSlot[]
   printJobs       PrintJob[]
+  printJobUsages  PrintJobSpoolUsage[]
+  auditLogs       SpoolAuditLog[]
   @@map("spools")
 }
 
@@ -82,6 +86,84 @@ model PrintJob {
 
   printer Printer? @relation(fields: [printerId], references: [id])
   spool   Spool?   @relation(fields: [spoolId], references: [id])
+  spoolUsages PrintJobSpoolUsage[]
 
   @@map("print_jobs")
+}
+
+model PrinterSlot {
+  id           String   @id @default(uuid())
+  printerId    String   @map("printer_id")
+  spoolId      String?  @map("spool_id")
+  sourceType   String   @default("ams") @map("source_type")
+  amsIndex     Int      @default(-1) @map("ams_index")
+  trayIndex    Int      @default(-1) @map("tray_index")
+  slotLabel    String   @map("slot_label")
+  entityId     String?  @map("entity_id")
+  isActive     Boolean  @default(false) @map("is_active")
+  isEmpty      Boolean? @map("is_empty")
+  tagUid       String?  @map("tag_uid")
+  trayUuid     String?  @map("tray_uuid")
+  filamentId   String?  @map("filament_id")
+  filamentType String?  @map("filament_type")
+  colorHex     String?  @map("color_hex")
+  trayWeight   Float?   @map("tray_weight")
+  remainPercent Float? @map("remain_percent")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  printer Printer @relation(fields: [printerId], references: [id], onDelete: Cascade)
+  spool   Spool?  @relation(fields: [spoolId], references: [id], onDelete: SetNull)
+  printJobUsages PrintJobSpoolUsage[]
+
+  @@unique([printerId, sourceType, amsIndex, trayIndex])
+  @@index([spoolId])
+  @@map("printer_slots")
+}
+
+model PrintJobSpoolUsage {
+  id         String   @id @default(uuid())
+  printJobId String  @map("print_job_id")
+  spoolId    String? @map("spool_id")
+  slotId     String? @map("slot_id")
+  sourceType String  @default("ams") @map("source_type")
+  amsIndex   Int     @default(-1) @map("ams_index")
+  trayIndex  Int     @default(-1) @map("tray_index")
+  slotLabel  String? @map("slot_label")
+  gramsUsed  Float   @map("grams_used")
+  metersUsed Float?  @map("meters_used")
+  deductedAt DateTime? @map("deducted_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  printJob PrintJob @relation(fields: [printJobId], references: [id], onDelete: Cascade)
+  spool    Spool?   @relation(fields: [spoolId], references: [id], onDelete: SetNull)
+  slot     PrinterSlot? @relation(fields: [slotId], references: [id], onDelete: SetNull)
+
+  @@index([printJobId])
+  @@index([spoolId])
+  @@index([slotId])
+  @@unique([printJobId, sourceType, amsIndex, trayIndex])
+  @@map("print_job_spool_usage")
+}
+
+model SpoolAuditLog {
+  id              String   @id @default(uuid())
+  spoolId         String   @map("spool_id")
+  printJobId      String?  @map("print_job_id")
+  usageId         String?  @map("usage_id")
+  action          String
+  reason          String?
+  deltaGrams      Float    @map("delta_grams")
+  beforeWeight    Float    @map("before_weight")
+  afterWeight     Float    @map("after_weight")
+  metadataJson    String?  @map("metadata_json")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  spool Spool @relation(fields: [spoolId], references: [id], onDelete: Cascade)
+
+  @@index([spoolId])
+  @@index([printJobId])
+  @@index([usageId])
+  @@map("spool_audit_logs")
 }

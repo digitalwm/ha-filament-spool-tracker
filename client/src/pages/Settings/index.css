@@ -155,5 +155,21 @@
 .settings-actions {
   margin-top: var(--spacing-md);
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
   justify-content: flex-end;
+}
+
+.notification-pref-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+.notification-pref-item {
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
 }

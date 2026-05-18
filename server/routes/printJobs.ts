@@ -3,6 +3,7 @@ import { getPrismaClient } from '../database';
 import { LOG } from '../utils/logger';
 import { getCoverImagePath, deleteCachedCoverImage } from '../services/coverImageCache';
 import type { PrintJobCreateRequest, PrintJobUpdateRequest } from '@ha-addon/types';
+import { adjustSpoolWeight } from '../services/spoolUsageCommit';
 
 const logger = LOG('PRINT_JOBS');
 const router: Router = Router();
@@ -47,7 +48,7 @@ router.post('/print-jobs', async (req: Request, res: Response) => {
         completedAt: status !== 'in_progress' ? new Date() : null,
         progress: status === 'completed' ? 100 : status === 'failed' || status === 'cancelled' ? null : undefined,
       },
-      include: { printer: true, spool: true },
+      include: { printer: true, spool: true, spoolUsages: { include: { spool: true, slot: true } } },
     });
 
     if (status === 'completed' && job.spoolId && job.filamentUsed != null && job.filamentUsed > 0) {
@@ -87,7 +88,7 @@ router.get('/print-jobs', async (req: Request, res: Response) => {
 
     const printJobs = await prisma.printJob.findMany({
       where,
-      include: { printer: true, spool: true },
+      include: { printer: true, spool: true, spoolUsages: { include: { spool: true, slot: true } } },
       orderBy: { startedAt: 'desc' },
       skip,
       take,
@@ -106,13 +107,74 @@ router.get('/print-jobs/:id', async (req: Request, res: Response) => {
   try {
     const job = await prisma.printJob.findUnique({
       where: { id: req.params.id as string },
-      include: { printer: true, spool: true },
+      include: { printer: true, spool: true, spoolUsages: { include: { spool: true, slot: true } } },
     });
     if (!job) return res.status(404).json({ error: 'Print job not found' });
     res.json(job);
   } catch (error) {
     logger.error('Failed to fetch print job:', error);
     res.status(500).json({ error: 'Failed to fetch print job' });
+  }
+});
+
+router.put('/print-jobs/:jobId/usages/:usageId', async (req: Request, res: Response) => {
+  const prisma = getPrismaClient();
+  if (!prisma) return res.status(503).json({ error: 'Database not available' });
+
+  try {
+    const gramsUsed = Number(req.body?.gramsUsed);
+    const spoolId = req.body?.spoolId === null ? null : (typeof req.body?.spoolId === 'string' ? req.body.spoolId : undefined);
+    if (!Number.isFinite(gramsUsed) || gramsUsed < 0) {
+      return res.status(400).json({ error: 'gramsUsed must be a non-negative number' });
+    }
+
+    const usage = await prisma.printJobSpoolUsage.findFirst({
+      where: { id: req.params.usageId as string, printJobId: req.params.jobId as string },
+    });
+    if (!usage) return res.status(404).json({ error: 'Usage row not found' });
+
+    const nextSpoolId = spoolId !== undefined ? spoolId : usage.spoolId;
+    if (nextSpoolId) {
+      const spool = await prisma.spool.findUnique({ where: { id: nextSpoolId } });
+      if (!spool) return res.status(404).json({ error: 'Spool not found' });
+    }
+
+    if (usage.deductedAt) {
+      if (usage.spoolId) {
+        await adjustSpoolWeight(prisma, {
+          spoolId: usage.spoolId,
+          deltaGrams: usage.gramsUsed,
+          action: 'usage_correction_restore',
+          reason: usage.slotLabel,
+          printJobId: usage.printJobId,
+          usageId: usage.id,
+        });
+      }
+      if (nextSpoolId) {
+        await adjustSpoolWeight(prisma, {
+          spoolId: nextSpoolId,
+          deltaGrams: -gramsUsed,
+          action: 'usage_correction_deduct',
+          reason: usage.slotLabel,
+          printJobId: usage.printJobId,
+          usageId: usage.id,
+        });
+      }
+    }
+
+    const updated = await prisma.printJobSpoolUsage.update({
+      where: { id: usage.id },
+      data: {
+        gramsUsed,
+        ...(spoolId !== undefined ? { spoolId: nextSpoolId } : {}),
+        deductedAt: usage.deductedAt ? new Date() : null,
+      },
+      include: { spool: true, slot: true },
+    });
+    res.json(updated);
+  } catch (error) {
+    logger.error('Failed to correct print usage:', error);
+    res.status(500).json({ error: 'Failed to correct print usage' });
   }
 });
 
@@ -159,7 +221,7 @@ router.put('/print-jobs/:id', async (req: Request, res: Response) => {
     const job = await prisma.printJob.update({
       where: { id: req.params.id as string },
       data,
-      include: { printer: true, spool: true },
+      include: { printer: true, spool: true, spoolUsages: { include: { spool: true, slot: true } } },
     });
 
     const leavingCompleted =

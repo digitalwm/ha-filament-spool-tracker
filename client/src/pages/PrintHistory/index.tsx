@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { printJobsApi, spoolsApi, printersApi } from '@services/api';
-import type { PrintJob, Spool, Printer, PrintJobStatus } from '@ha-addon/types';
+import type { PrintJob, Spool, Printer, PrintJobStatus, PrintJobSpoolUsage } from '@ha-addon/types';
 import PrintJobCard from '@components/PrintJobCard';
 import AddPrintJobModal from '@modals/AddPrintJobModal';
 import ConfirmModal from '@modals/ConfirmModal';
 import PrintJobStatusConfirmModal, { type StatusChangeApplyOptions } from '@modals/PrintJobStatusConfirmModal';
 import PrintJobSpoolChangeConfirmModal, { type SpoolChangeApplyOptions } from '@modals/PrintJobSpoolChangeConfirmModal';
+import UsageCorrectionModal from '@modals/UsageCorrectionModal';
 import './index.css';
 
 const PAGE_SIZE = 20;
@@ -30,6 +31,7 @@ export default function PrintHistoryPage() {
     newSpoolId: string | null;
     newSpoolLabel: string;
   } | null>(null);
+  const [usageCorrectionDraft, setUsageCorrectionDraft] = useState<{ job: PrintJob; usage: PrintJobSpoolUsage } | null>(null);
 
   // Initialize status filter from query string (e.g. /history?status=in_progress)
   useEffect(() => {
@@ -205,6 +207,23 @@ export default function PrintHistoryPage() {
     }
   };
 
+  const handleUsageCorrectRequest = (job: PrintJob, usageId: string) => {
+    const usage = (job.spoolUsages ?? []).find((u) => u.id === usageId);
+    if (usage) setUsageCorrectionDraft({ job, usage });
+  };
+
+  const applyUsageCorrection = async (data: { gramsUsed: number; spoolId?: string | null }) => {
+    if (!usageCorrectionDraft) return;
+    try {
+      await printJobsApi.updateUsage(usageCorrectionDraft.job.id, usageCorrectionDraft.usage.id, data);
+      setUsageCorrectionDraft(null);
+      await reloadFirstPage();
+      spoolsApi.getAll().then((r) => setSpools(r.data)).catch(() => {});
+    } catch (err) {
+      console.error('Failed to correct usage:', err);
+    }
+  };
+
   const statuses = ['', 'in_progress', 'completed', 'failed', 'cancelled'];
   const statusLabels: Record<string, string> = {
     '': 'All',
@@ -256,6 +275,7 @@ export default function PrintHistoryPage() {
                 spoolsForReassign={spools.filter((s) => s.archivedAt === null)}
                 onSpoolChange={handleSpoolChangeRequest}
                 onStatusChange={handleStatusChangeRequest}
+                onUsageCorrect={handleUsageCorrectRequest}
                 onDelete={(j) => setDeletingJob(j)}
               />
             ))}
@@ -338,6 +358,16 @@ export default function PrintHistoryPage() {
           newSpoolLabel={printJobSpoolChangeDraft.newSpoolLabel}
           onCancel={() => setPrintJobSpoolChangeDraft(null)}
           onApply={applyPrintJobSpoolChange}
+        />
+      )}
+
+      {usageCorrectionDraft && (
+        <UsageCorrectionModal
+          job={usageCorrectionDraft.job}
+          usage={usageCorrectionDraft.usage}
+          spools={spools}
+          onCancel={() => setUsageCorrectionDraft(null)}
+          onApply={applyUsageCorrection}
         />
       )}
     </div>

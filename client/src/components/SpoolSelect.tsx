@@ -13,6 +13,8 @@ export interface SpoolOption {
   colorHex?: string | null;
   /** Remaining filament (g); shown in dropdown and default trigger to disambiguate similar spools */
   remainingWeight?: number;
+  /** Projected remaining filament during an active print, before final deduction is committed */
+  liveRemainingWeight?: number;
 }
 
 interface SpoolSelectProps {
@@ -61,7 +63,7 @@ export default function SpoolSelect({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedSpool: SpoolOption | null = value ? spools.find((s) => s.id === value) ?? null : null;
-  const selectedRemainingLabel = formatRemaining(selectedSpool?.remainingWeight);
+  const selectedRemainingLabel = formatRemaining(selectedSpool?.liveRemainingWeight ?? selectedSpool?.remainingWeight);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -139,7 +141,7 @@ export default function SpoolSelect({
             <span className="spool-select-option-none">{placeholder}</span>
           </li>
           {spools.map((spool) => {
-            const remainingLabel = formatRemaining(spool.remainingWeight);
+            const remainingLabel = formatRemaining(spool.liveRemainingWeight ?? spool.remainingWeight);
             return (
               <li
                 key={spool.id}

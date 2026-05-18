@@ -1,6 +1,6 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import type {
-  Spool, PrintJob, Printer, DashboardStats,
+  Spool, PrintJob, Printer, DashboardStats, SpoolAuditLog, PrinterTimelineEvent,
   SpoolCreateRequest, SpoolUpdateRequest, DeductionRequest,
   PrinterCreateRequest, PrinterUpdateRequest,
   PrintJobCreateRequest, PrintJobUpdateRequest,
@@ -65,6 +65,8 @@ export const healthApi = {
 export const spoolsApi = {
   getAll: (status?: string) => api.get<Spool[]>('/spools', { params: { status } }),
   getById: (id: string) => api.get<Spool>(`/spools/${id}`),
+  getAudit: (id: string) => api.get<SpoolAuditLog[]>(`/spools/${id}/audit`),
+  undoAudit: (spoolId: string, logId: string) => api.post<Spool>(`/spools/${spoolId}/audit/${logId}/undo`),
   create: (data: SpoolCreateRequest) => api.post<Spool>('/spools', data),
   update: (id: string, data: SpoolUpdateRequest) => api.put<Spool>(`/spools/${id}`, data),
   delete: (id: string) => api.delete(`/spools/${id}`),
@@ -80,6 +82,8 @@ export const printJobsApi = {
   getById: (id: string) => api.get<PrintJob>(`/print-jobs/${id}`),
   create: (data: PrintJobCreateRequest) => api.post<PrintJob>('/print-jobs', data),
   update: (id: string, data: PrintJobUpdateRequest) => api.put<PrintJob>(`/print-jobs/${id}`, data),
+  updateUsage: (jobId: string, usageId: string, data: { gramsUsed: number; spoolId?: string | null }) =>
+    api.put(`/print-jobs/${jobId}/usages/${usageId}`, data),
   delete: (id: string) => api.delete(`/print-jobs/${id}`),
 };
 
@@ -87,7 +91,19 @@ export const printersApi = {
   getAll: () => api.get<Printer[]>('/printers'),
   create: (data: PrinterCreateRequest) => api.post<Printer>('/printers', data),
   update: (id: string, data: PrinterUpdateRequest) => api.put<Printer>(`/printers/${id}`, data),
+  syncSlots: (id: string) => api.post(`/printers/${id}/sync-slots`),
+  recoverActivePrint: (id: string) => api.post(`/printers/${id}/recover-active-print`),
+  getTimeline: (id: string) => api.get<PrinterTimelineEvent[]>(`/printers/${id}/timeline`),
+  updateSlot: (printerId: string, slotId: string, data: { spoolId?: string | null }) =>
+    api.put(`/printers/${printerId}/slots/${slotId}`, data),
   delete: (id: string) => api.delete(`/printers/${id}`),
+};
+
+export const maintenanceApi = {
+  resyncEntities: () => api.post('/maintenance/resync-entities'),
+  commitPending: () => api.post('/maintenance/commit-pending'),
+  clearStaleJobs: () => api.post('/maintenance/clear-stale-jobs'),
+  backfillAudit: () => api.post('/maintenance/backfill-audit'),
 };
 
 export const dashboardApi = {
