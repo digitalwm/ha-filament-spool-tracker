@@ -286,6 +286,40 @@ router.put('/printers/:printerId/slots/:slotId', async (req: Request, res: Respo
     const existing = await prisma.printerSlot.findFirst({ where: { id: slotId, printerId } });
     if (!existing) return res.status(404).json({ error: 'Printer slot not found' });
 
+    if (spoolId && existing.tagUid) {
+      const selectedSpool = await prisma.spool.findUnique({ where: { id: spoolId } });
+      if (selectedSpool?.tagUid && selectedSpool.tagUid !== existing.tagUid) {
+        return res.status(400).json({ error: `Spool "${selectedSpool.name}" is already linked to a different RFID tag` });
+      }
+      const tagOwner = await prisma.spool.findFirst({ where: { tagUid: existing.tagUid, id: { not: spoolId } } });
+      if (tagOwner && !tagOwner.isRfidTemporary) {
+        return res.status(400).json({ error: `RFID tag is already linked to spool "${tagOwner.name}"` });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        if (tagOwner?.isRfidTemporary) {
+          await tx.spool.update({
+            where: { id: tagOwner.id },
+            data: {
+              tagUid: null,
+              filamentId: null,
+              isActive: false,
+              archivedAt: new Date(),
+              notes: `${tagOwner.notes ?? ''}\nRFID tag was transferred to a validated spool.`.trim(),
+            },
+          });
+        }
+        await tx.spool.update({
+          where: { id: spoolId },
+          data: {
+            tagUid: existing.tagUid,
+            filamentId: existing.filamentId ?? undefined,
+            isRfidTemporary: false,
+          },
+        });
+      });
+    }
+
     const slot = await prisma.printerSlot.update({
       where: { id: slotId },
       data: { ...(spoolId !== undefined ? { spoolId } : {}) },

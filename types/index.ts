@@ -79,6 +79,9 @@ export interface Spool {
   archivedAt: string | null;
   expirationDate: string | null;
   purchaseDate: string | null;
+  tagUid: string | null;
+  filamentId: string | null;
+  isRfidTemporary: boolean;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -160,6 +163,9 @@ export interface SpoolCreateRequest {
   diameter?: number;
   expirationDate?: string;
   purchaseDate?: string;
+  tagUid?: string | null;
+  filamentId?: string | null;
+  isRfidTemporary?: boolean;
   notes?: string;
 }
 

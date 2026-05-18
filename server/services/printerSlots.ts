@@ -56,6 +56,75 @@ function stableSlotWhere(printerId: string, slot: SlotIdentity) {
   };
 }
 
+function temporarySpoolName(data: Prisma.PrinterSlotUncheckedCreateInput): string {
+  const type = data.filamentType && data.filamentType !== 'Empty' ? data.filamentType : 'Filament';
+  return `Unverified ${type} (${data.slotLabel})`;
+}
+
+function temporarySpoolRemaining(data: Prisma.PrinterSlotUncheckedCreateInput): number {
+  const trayWeight = typeof data.trayWeight === 'number' && data.trayWeight > 0 ? data.trayWeight : 1000;
+  const remain = typeof data.remainPercent === 'number' && data.remainPercent >= 0 ? Math.min(100, data.remainPercent) : 100;
+  return Math.max(0, trayWeight * (remain / 100));
+}
+
+function normalizeTagUid(value: unknown): string | null {
+  const tag = asString(value);
+  if (!tag) return null;
+  return /^0+$/.test(tag) ? null : tag;
+}
+
+async function resolveSpoolIdForSlot(
+  prisma: PrismaClient,
+  printerId: string,
+  identity: SlotIdentity,
+  data: Prisma.PrinterSlotUncheckedCreateInput,
+): Promise<string | null> {
+  if (data.isEmpty || !data.tagUid) return null;
+
+  const existingSlot = await prisma.printerSlot.findUnique({ where: stableSlotWhere(printerId, identity), include: { spool: true } });
+  if (existingSlot?.spoolId && existingSlot.spool && !existingSlot.spool.isRfidTemporary) {
+    if (existingSlot.spool.tagUid && existingSlot.spool.tagUid !== data.tagUid) {
+      logger.info(`RFID tag changed in ${identity.slotLabel}; resolving spool by reported tag instead of previous assignment`);
+    } else {
+      try {
+        await prisma.spool.update({
+          where: { id: existingSlot.spoolId },
+          data: {
+            ...(data.tagUid && !existingSlot.spool.tagUid ? { tagUid: data.tagUid } : {}),
+            ...(data.filamentId && !existingSlot.spool.filamentId ? { filamentId: data.filamentId } : {}),
+          },
+        });
+      } catch (err) {
+        logger.warn('Failed to bind RFID identity to assigned spool:', err);
+      }
+      return existingSlot.spoolId;
+    }
+  }
+
+  const known = await prisma.spool.findFirst({ where: { tagUid: data.tagUid, archivedAt: null } });
+  if (known) return known.id;
+
+  const created = await prisma.spool.create({
+    data: {
+      name: temporarySpoolName(data),
+      filamentType: data.filamentType && data.filamentType !== 'Empty' ? data.filamentType : 'Other',
+      colorStyle: 'solid',
+      color: data.colorHex ?? 'Unknown',
+      colorHex: data.colorHex ?? null,
+      manufacturer: data.filamentId ? 'Bambu Lab' : null,
+      initialWeight: typeof data.trayWeight === 'number' && data.trayWeight > 0 ? data.trayWeight : 1000,
+      remainingWeight: temporarySpoolRemaining(data),
+      diameter: 1.75,
+      tagUid: data.tagUid ?? null,
+      filamentId: data.filamentId ?? null,
+      isRfidTemporary: true,
+      notes: 'Automatically created from an unknown AMS RFID tag. Review and validate this spool.',
+    },
+  });
+  logger.info(`Created temporary RFID spool "${created.name}" for ${identity.slotLabel}`);
+  return created.id;
+}
+
 export function slotLabel(slot: Pick<SlotIdentity, 'sourceType' | 'amsIndex' | 'trayIndex'>): string {
   if (slot.sourceType === 'external') {
     return slot.trayIndex === 1 ? 'External Spool 2' : 'External Spool';
@@ -142,6 +211,8 @@ function upsertDataFromState(
 ): Prisma.PrinterSlotUncheckedCreateInput {
   const attrs = state.attributes ?? {};
   const label = slotLabel({ sourceType, amsIndex, trayIndex });
+  const isExternal = sourceType === 'external';
+  const isEmpty = isExternal || asBoolean(attrs.empty) || /^empty$/i.test(String(state.state ?? ''));
   return {
     printerId,
     sourceType,
@@ -150,14 +221,14 @@ function upsertDataFromState(
     slotLabel: label,
     entityId: state.entity_id,
     isActive: activeOverride ?? asBoolean(attrs.active) ?? false,
-    isEmpty: asBoolean(attrs.empty) ?? /^empty$/i.test(String(state.state ?? '')),
-    tagUid: asString(attrs.tag_uid),
-    trayUuid: asString(attrs.tray_uuid),
-    filamentId: asString(attrs.filament_id),
-    filamentType: asString(attrs.type) ?? (/^empty$/i.test(String(state.state ?? '')) ? 'Empty' : asString(state.state)),
-    colorHex: normalizeColor(attrs.color),
-    trayWeight: asNumber(attrs.tray_weight),
-    remainPercent: asNumber(attrs.remain),
+    isEmpty,
+    tagUid: isExternal ? null : normalizeTagUid(attrs.tag_uid),
+    trayUuid: isExternal ? null : asString(attrs.tray_uuid),
+    filamentId: isExternal ? null : asString(attrs.filament_id),
+    filamentType: isExternal ? 'Empty' : asString(attrs.type) ?? (isEmpty ? 'Empty' : asString(state.state)),
+    colorHex: isExternal ? null : normalizeColor(attrs.color),
+    trayWeight: isExternal ? null : asNumber(attrs.tray_weight),
+    remainPercent: isExternal ? null : asNumber(attrs.remain),
   };
 }
 
@@ -187,12 +258,14 @@ export async function syncPrinterSlotsFromHA(prisma: PrismaClient, printer: Prin
     const isActive = sourceType === 'ams' && activeAms === amsIndex && activeTray === trayIndex;
     const data = upsertDataFromState(printer.id, state, sourceType, amsIndex, trayIndex, isActive);
     const identity = { sourceType, amsIndex, trayIndex, slotLabel: data.slotLabel };
+    const spoolId = await resolveSpoolIdForSlot(prisma, printer.id, identity, data);
     await prisma.printerSlot.upsert({
       where: stableSlotWhere(printer.id, identity),
-      create: data,
+      create: { ...data, ...(spoolId ? { spoolId } : {}) },
       update: {
         slotLabel: data.slotLabel,
         entityId: data.entityId,
+        ...(spoolId ? { spoolId } : {}),
         isActive: data.isActive,
         isEmpty: data.isEmpty,
         tagUid: data.tagUid,
@@ -226,15 +299,17 @@ export async function upsertActiveSlotFromHAState(
   const normalizedAms = sourceType === 'external' ? -1 : (amsIndex ?? -1);
   const data = upsertDataFromState(printer.id, state, sourceType, normalizedAms, trayIndex, true);
   const identity = { sourceType, amsIndex: normalizedAms, trayIndex, slotLabel: data.slotLabel };
+  const spoolId = await resolveSpoolIdForSlot(prisma, printer.id, identity, data);
 
   await prisma.$transaction(async (tx) => {
     await tx.printerSlot.updateMany({ where: { printerId: printer.id }, data: { isActive: false } });
     await tx.printerSlot.upsert({
       where: stableSlotWhere(printer.id, identity),
-      create: data,
+      create: { ...data, ...(spoolId ? { spoolId } : {}) },
       update: {
         slotLabel: data.slotLabel,
         isActive: true,
+        ...(spoolId ? { spoolId } : {}),
         entityId: data.entityId,
         tagUid: data.tagUid,
         trayUuid: data.trayUuid,

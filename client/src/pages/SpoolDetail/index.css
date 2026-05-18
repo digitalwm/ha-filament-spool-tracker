@@ -62,6 +62,43 @@
   line-height: 1.2;
 }
 
+.spool-detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.spool-detail-active-badge,
+.spool-detail-archived-badge,
+.spool-detail-review-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.spool-detail-active-badge {
+  background: rgba(63, 185, 80, 0.14);
+  color: var(--success-color);
+  border: 1px solid rgba(63, 185, 80, 0.35);
+}
+
+.spool-detail-archived-badge {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+}
+
+.spool-detail-review-badge {
+  background: rgba(248, 81, 73, 0.14);
+  color: var(--warning-color);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+}
+
 .spool-detail-meta {
   font-size: 14px;
   color: var(--text-secondary);
@@ -70,6 +107,56 @@
 
 .spool-detail-progress {
   max-width: 400px;
+}
+
+.spool-detail-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.spool-detail-metric,
+.spool-detail-notes {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.spool-detail-metric-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.spool-detail-metric strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.spool-detail-metric span:last-child {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.spool-detail-notes {
+  grid-column: 1 / -1;
+}
+
+.spool-detail-notes p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  white-space: pre-wrap;
 }
 
 .spool-detail-section .section-title {
@@ -161,4 +248,21 @@
   overflow: auto;
   white-space: pre-wrap;
   color: var(--text-primary);
+}
+
+@media (max-width: 640px) {
+  .spool-detail-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .spool-detail-actions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .spool-audit-row {
+    grid-template-columns: 1fr;
+  }
 }

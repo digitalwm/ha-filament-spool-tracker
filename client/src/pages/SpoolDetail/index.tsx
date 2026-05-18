@@ -73,7 +73,10 @@ export default function SpoolDetailPage() {
   const handleSaveEdit = async (data: SpoolCreateRequest) => {
     if (!spool) return;
     try {
-      const updated = await spoolsApi.update(spool.id, data);
+      const updated = await spoolsApi.update(spool.id, {
+        ...data,
+        ...(spool.isRfidTemporary ? { isRfidTemporary: false } : {}),
+      });
       setSpool(updated.data);
       setShowEditModal(false);
     } catch (err) {
@@ -116,6 +119,9 @@ export default function SpoolDetailPage() {
   };
 
   const displayRemaining = spool.liveRemainingWeight ?? spool.remainingWeight;
+  const remainingPercent = spool.initialWeight > 0 ? Math.max(0, Math.min(100, (displayRemaining / spool.initialWeight) * 100)) : 0;
+  const isActive = spool.isActive || !!spool.loadedOnPrinter;
+  const formatDate = (dateStr: string | null) => dateStr ? new Date(dateStr).toLocaleDateString() : 'Not set';
   const formatMetadata = (metadataJson: string) => {
     try {
       return JSON.stringify(JSON.parse(metadataJson), null, 2);
@@ -140,10 +146,23 @@ export default function SpoolDetailPage() {
           colorName={spool.color}
         />
         <div className="spool-detail-info">
-          <h1 className="spool-detail-name">{spool.name}</h1>
+          <div className="spool-detail-title-row">
+            <h1 className="spool-detail-name">{spool.name}</h1>
+            {spool.isRfidTemporary ? (
+              <span className="spool-detail-review-badge" title={spool.tagUid ? `RFID ${spool.tagUid}` : 'Unknown RFID spool'}>
+                Review RFID
+              </span>
+            ) : spool.archivedAt ? (
+              <span className="spool-detail-archived-badge">Archived</span>
+            ) : isActive ? (
+              <span className="spool-detail-active-badge" title={spool.loadedOnPrinter ? `Loaded on ${spool.loadedOnPrinter.name}` : undefined}>
+                {spool.loadedOnPrinter ? `On ${spool.loadedOnPrinter.name}` : 'Active'}
+              </span>
+            ) : null}
+          </div>
           <SpoolMetaBadges filamentType={spool.filamentType} colorStyle={spool.colorStyle} />
           <span className="spool-detail-meta">
-            {Math.round(displayRemaining)}g / {Math.round(spool.initialWeight)}g
+            {Math.round(displayRemaining)}g / {Math.round(spool.initialWeight)}g remaining
           </span>
         </div>
         <div className="spool-detail-actions">
@@ -164,6 +183,45 @@ export default function SpoolDetailPage() {
       <div className="spool-detail-progress">
         <ProgressBar value={displayRemaining} max={spool.initialWeight} size="md" />
       </div>
+
+      <section className="spool-detail-overview" aria-label="Spool information">
+        <div className="spool-detail-metric">
+          <span className="spool-detail-metric-label">Remaining</span>
+          <strong>{Math.round(displayRemaining)}g</strong>
+          <span>{Math.round(remainingPercent)}%</span>
+        </div>
+        <div className="spool-detail-metric">
+          <span className="spool-detail-metric-label">Starting</span>
+          <strong>{Math.round(spool.initialWeight)}g</strong>
+          <span>{spool.spoolWeight != null ? `${Math.round(spool.spoolWeight)}g spool` : 'Spool weight not set'}</span>
+        </div>
+        <div className="spool-detail-metric">
+          <span className="spool-detail-metric-label">Material</span>
+          <strong>{spool.filamentType}</strong>
+          <span>{spool.manufacturer || 'Manufacturer not set'}</span>
+        </div>
+        <div className="spool-detail-metric">
+          <span className="spool-detail-metric-label">Diameter</span>
+          <strong>{spool.diameter}mm</strong>
+          <span>{spool.color}</span>
+        </div>
+        <div className="spool-detail-metric">
+          <span className="spool-detail-metric-label">RFID tag</span>
+          <strong>{spool.tagUid || 'Not linked'}</strong>
+          <span>{spool.filamentId || 'No filament ID'}</span>
+        </div>
+        <div className="spool-detail-metric">
+          <span className="spool-detail-metric-label">Dates</span>
+          <strong>Purchased {formatDate(spool.purchaseDate)}</strong>
+          <span>Expires {formatDate(spool.expirationDate)}</span>
+        </div>
+        {spool.notes && (
+          <div className="spool-detail-notes">
+            <span className="spool-detail-metric-label">Notes</span>
+            <p>{spool.notes}</p>
+          </div>
+        )}
+      </section>
 
       <section className="spool-detail-section">
         <h2 className="section-title">Audit log</h2>

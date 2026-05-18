@@ -28,13 +28,16 @@ async function main() {
       spool_weight REAL,
       diameter REAL NOT NULL DEFAULT 1.75,
       is_active INTEGER NOT NULL DEFAULT 0,
-      archived_at TEXT,
-      expiration_date TEXT,
-      purchase_date TEXT,
-      notes TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )
+	      archived_at TEXT,
+	      expiration_date TEXT,
+	      purchase_date TEXT,
+	      tag_uid TEXT,
+	      filament_id TEXT,
+	      is_rfid_temporary INTEGER NOT NULL DEFAULT 0,
+	      notes TEXT,
+	      created_at TEXT NOT NULL,
+	      updated_at TEXT NOT NULL
+	    )
   `);
   await prisma.$executeRawUnsafe(`
     CREATE TABLE print_job_spool_usage (

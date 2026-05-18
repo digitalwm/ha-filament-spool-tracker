@@ -151,6 +151,9 @@ router.post('/spools', async (req: Request, res: Response) => {
         diameter: body.diameter ?? 1.75,
         expirationDate: body.expirationDate ? new Date(body.expirationDate) : null,
         purchaseDate: body.purchaseDate ? new Date(body.purchaseDate) : null,
+        tagUid: body.tagUid ?? null,
+        filamentId: body.filamentId ?? null,
+        isRfidTemporary: body.isRfidTemporary ?? false,
         notes: body.notes,
       },
     });
@@ -183,6 +186,9 @@ router.put('/spools/:id', async (req: Request, res: Response) => {
     if (body.isActive !== undefined) data.isActive = body.isActive;
     if (body.expirationDate !== undefined) data.expirationDate = body.expirationDate ? new Date(body.expirationDate) : null;
     if (body.purchaseDate !== undefined) data.purchaseDate = body.purchaseDate ? new Date(body.purchaseDate) : null;
+    if (body.tagUid !== undefined) data.tagUid = body.tagUid;
+    if (body.filamentId !== undefined) data.filamentId = body.filamentId;
+    if (body.isRfidTemporary !== undefined) data.isRfidTemporary = body.isRfidTemporary;
     if (body.notes !== undefined) data.notes = body.notes;
 
     const spool = await prisma.spool.update({

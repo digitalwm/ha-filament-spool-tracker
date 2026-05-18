@@ -46,7 +46,11 @@ export default function SpoolCard({ spool, onEdit, onDeduct, onArchive, onDelete
           )}
           <SpoolMetaBadges filamentType={spool.filamentType} colorStyle={spool.colorStyle} />
         </div>
-        {archivedAtDisplay ? (
+        {spool.isRfidTemporary ? (
+          <span className="spool-review-badge" title={spool.tagUid ? `RFID ${spool.tagUid}` : 'Unknown RFID spool'}>
+            Review RFID
+          </span>
+        ) : archivedAtDisplay ? (
           <span className="spool-archived-badge" title={`Archived ${archivedAtDisplay}`}>
             {archivedAtDisplay}
           </span>

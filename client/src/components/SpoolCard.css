@@ -64,7 +64,8 @@
 }
 
 .spool-card-header > .spool-active-badge,
-.spool-card-header > .spool-archived-badge {
+.spool-card-header > .spool-archived-badge,
+.spool-card-header > .spool-review-badge {
   flex-shrink: 0;
   max-width: 12rem;
   overflow: hidden;
@@ -86,6 +87,17 @@
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.spool-review-badge {
+  background: rgba(248, 81, 73, 0.14);
+  color: var(--warning-color);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+  font-size: 11px;
+  font-weight: 700;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   white-space: nowrap;

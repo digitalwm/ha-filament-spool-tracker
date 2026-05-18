@@ -57,6 +57,9 @@ model Spool {
   archivedAt      DateTime? @map("archived_at")
   expirationDate  DateTime? @map("expiration_date")
   purchaseDate    DateTime? @map("purchase_date")
+  tagUid          String?   @unique @map("tag_uid")
+  filamentId      String?   @map("filament_id")
+  isRfidTemporary Boolean   @default(false) @map("is_rfid_temporary")
   notes           String?
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")

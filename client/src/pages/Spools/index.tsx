@@ -82,7 +82,10 @@ export default function SpoolsPage() {
   const handleSave = async (data: SpoolCreateRequest) => {
     try {
       if (editingSpool) {
-        await spoolsApi.update(editingSpool.id, data);
+        await spoolsApi.update(editingSpool.id, {
+          ...data,
+          ...(editingSpool.isRfidTemporary ? { isRfidTemporary: false } : {}),
+        });
       } else {
         await spoolsApi.create(data);
       }
