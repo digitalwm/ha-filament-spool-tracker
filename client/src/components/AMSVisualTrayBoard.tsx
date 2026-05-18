@@ -18,7 +18,7 @@ function trayNumber(slot: PrinterSlot): string {
 }
 
 function slotColor(slot: PrinterSlot): string | null {
-  return slot.spool?.colorHex ?? slot.colorHex ?? null;
+  return slot.colorHex ?? slot.spool?.colorHex ?? null;
 }
 
 function remainingPercent(slot: PrinterSlot): number {
@@ -44,6 +44,26 @@ function normalizeHex(value: string | null | undefined): string | null {
   return s.length === 6 ? s : null;
 }
 
+function parseRgb(hex: string | null): { r: number; g: number; b: number } | null {
+  if (!hex) return null;
+  return {
+    r: Number.parseInt(hex.slice(0, 2), 16),
+    g: Number.parseInt(hex.slice(2, 4), 16),
+    b: Number.parseInt(hex.slice(4, 6), 16),
+  };
+}
+
+function colorDistance(a: string | null, b: string | null): number | null {
+  const ca = parseRgb(a);
+  const cb = parseRgb(b);
+  if (!ca || !cb) return null;
+  return Math.sqrt(
+    (ca.r - cb.r) ** 2 +
+    (ca.g - cb.g) ** 2 +
+    (ca.b - cb.b) ** 2,
+  );
+}
+
 function hasMismatch(slot: PrinterSlot): boolean {
   if (!slot.spool || slot.isEmpty) return false;
   const typeMismatch =
@@ -52,7 +72,8 @@ function hasMismatch(slot: PrinterSlot): boolean {
     slot.spool.filamentType.toLowerCase() !== slot.filamentType!.toLowerCase();
   const trayHex = normalizeHex(slot.colorHex);
   const spoolHex = normalizeHex(slot.spool.colorHex);
-  const colorMismatch = Boolean(trayHex && spoolHex && trayHex !== spoolHex);
+  const distance = colorDistance(trayHex, spoolHex);
+  const colorMismatch = distance != null && distance > 48;
   return typeMismatch || colorMismatch;
 }
 
