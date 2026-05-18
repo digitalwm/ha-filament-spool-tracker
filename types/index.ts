@@ -74,6 +74,8 @@ export interface Spool {
   initialWeight: number;
   remainingWeight: number;
   spoolWeight: number | null;
+  purchasePrice: number | null;
+  priceCurrency: string | null;
   diameter: number;
   isActive: boolean;
   archivedAt: string | null;
@@ -160,6 +162,8 @@ export interface SpoolCreateRequest {
   initialWeight: number;
   remainingWeight?: number;
   spoolWeight?: number;
+  purchasePrice?: number | null;
+  priceCurrency?: string | null;
   diameter?: number;
   expirationDate?: string;
   purchaseDate?: string;

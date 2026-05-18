@@ -131,6 +131,19 @@
   color: var(--text-muted);
 }
 
+.spool-price-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.spool-price-line span:first-child {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 .spool-card-actions {
   display: flex;
   gap: var(--spacing-xs);

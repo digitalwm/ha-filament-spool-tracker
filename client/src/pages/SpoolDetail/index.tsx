@@ -6,6 +6,7 @@ import PrintJobCard from '@components/PrintJobCard';
 import SpoolColorSwatch from '@components/SpoolColorSwatch';
 import SpoolMetaBadges from '@components/SpoolMetaBadges';
 import ProgressBar from '@components/ProgressBar';
+import { formatMoney, formatPricePerKg, pricePerGram, remainingValue, usedValue } from '@utils/spoolPricing';
 import AddEditSpoolModal from '@modals/AddEditSpoolModal';
 import DeductFilamentModal from '@modals/DeductFilamentModal';
 import ConfirmModal from '@modals/ConfirmModal';
@@ -121,6 +122,9 @@ export default function SpoolDetailPage() {
   const displayRemaining = spool.liveRemainingWeight ?? spool.remainingWeight;
   const remainingPercent = spool.initialWeight > 0 ? Math.max(0, Math.min(100, (displayRemaining / spool.initialWeight) * 100)) : 0;
   const isActive = spool.isActive || !!spool.loadedOnPrinter;
+  const unitPrice = pricePerGram(spool);
+  const remainingMoney = remainingValue(spool, displayRemaining);
+  const usedMoney = usedValue(spool, displayRemaining);
   const formatDate = (dateStr: string | null) => dateStr ? new Date(dateStr).toLocaleDateString() : 'Not set';
   const formatMetadata = (metadataJson: string) => {
     try {
@@ -194,6 +198,21 @@ export default function SpoolDetailPage() {
           <span className="spool-detail-metric-label">Starting</span>
           <strong>{Math.round(spool.initialWeight)}g</strong>
           <span>{spool.spoolWeight != null ? `${Math.round(spool.spoolWeight)}g spool` : 'Spool weight not set'}</span>
+        </div>
+        <div className="spool-detail-metric">
+          <span className="spool-detail-metric-label">Price</span>
+          <strong>{formatMoney(spool.purchasePrice, spool.priceCurrency) || 'Not set'}</strong>
+          <span>{formatPricePerKg(spool) ? `${formatPricePerKg(spool)}/kg` : 'No cost basis'}</span>
+        </div>
+        <div className="spool-detail-metric">
+          <span className="spool-detail-metric-label">Value</span>
+          <strong>{formatMoney(remainingMoney, spool.priceCurrency) || 'Not set'} left</strong>
+          <span>{formatMoney(usedMoney, spool.priceCurrency) || 'Not set'} used</span>
+        </div>
+        <div className="spool-detail-metric">
+          <span className="spool-detail-metric-label">Unit cost</span>
+          <strong>{unitPrice != null ? `${formatMoney(unitPrice, spool.priceCurrency)}/g` : 'Not set'}</strong>
+          <span>{unitPrice != null ? `${formatMoney(unitPrice * 10, spool.priceCurrency)}/10g` : 'Add purchase price'}</span>
         </div>
         <div className="spool-detail-metric">
           <span className="spool-detail-metric-label">Material</span>

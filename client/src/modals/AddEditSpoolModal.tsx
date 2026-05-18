@@ -98,6 +98,8 @@ export default function AddEditSpoolModal({
   }, [spool, defaultWeightGrams]);
 
   const [spoolWeight, setSpoolWeight] = useState(String(spool?.spoolWeight ?? ''));
+  const [purchasePrice, setPurchasePrice] = useState(String(spool?.purchasePrice ?? ''));
+  const [priceCurrency, setPriceCurrency] = useState(spool?.priceCurrency ?? 'EUR');
   const [diameter, setDiameter] = useState(String(spool?.diameter ?? 1.75));
   const [purchaseDate, setPurchaseDate] = useState(spool?.purchaseDate?.split('T')[0] ?? '');
   const [expirationDate, setExpirationDate] = useState(spool?.expirationDate?.split('T')[0] ?? '');
@@ -119,6 +121,8 @@ export default function AddEditSpoolModal({
       initialWeight: parseFloat(initialWeight),
       remainingWeight: parseFloat(remainingWeight),
       spoolWeight: spoolWeight ? parseFloat(spoolWeight) : undefined,
+      purchasePrice: purchasePrice ? parseFloat(purchasePrice) : null,
+      priceCurrency: purchasePrice ? priceCurrency.trim().toUpperCase() || 'EUR' : null,
       diameter: parseFloat(diameter),
       purchaseDate: purchaseDate || undefined,
       expirationDate: expirationDate || undefined,
@@ -257,6 +261,31 @@ export default function AddEditSpoolModal({
             <div className="form-group">
               <label>Diameter (mm)</label>
               <input type="number" value={diameter} onChange={(e) => setDiameter(e.target.value)} min="1" step="0.01" />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>Purchase Price</label>
+              <input
+                type="number"
+                value={purchasePrice}
+                onChange={(e) => setPurchasePrice(e.target.value)}
+                min="0"
+                step="0.01"
+                placeholder="e.g. 24.99"
+              />
+            </div>
+            <div className="form-group">
+              <label>Currency</label>
+              <input
+                type="text"
+                value={priceCurrency}
+                onChange={(e) => setPriceCurrency(e.target.value.toUpperCase())}
+                maxLength={3}
+                placeholder="EUR"
+                autoComplete="off"
+              />
             </div>
           </div>
 

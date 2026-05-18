@@ -139,6 +139,11 @@
   color: var(--text-muted);
 }
 
+.print-job-cost {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 .spool-dot {
   width: 10px;
   height: 10px;
@@ -215,6 +220,19 @@
   border-radius: var(--radius-sm);
   background: rgba(35, 134, 54, 0.14);
   color: #3fb950;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.print-job-cost-summary {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border: 1px solid rgba(88, 166, 255, 0.35);
+  border-radius: var(--radius-sm);
+  background: rgba(88, 166, 255, 0.12);
+  color: var(--accent-primary);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;

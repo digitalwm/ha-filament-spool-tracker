@@ -52,6 +52,8 @@ model Spool {
   initialWeight   Float     @map("initial_weight")
   remainingWeight Float     @map("remaining_weight")
   spoolWeight     Float?    @map("spool_weight")
+  purchasePrice   Float?    @map("purchase_price")
+  priceCurrency   String?   @map("price_currency")
   diameter        Float     @default(1.75)
   isActive        Boolean   @default(false) @map("is_active")
   archivedAt      DateTime? @map("archived_at")

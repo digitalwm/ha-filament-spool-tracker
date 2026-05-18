@@ -148,6 +148,8 @@ router.post('/spools', async (req: Request, res: Response) => {
         initialWeight: body.initialWeight,
         remainingWeight: body.remainingWeight ?? body.initialWeight,
         spoolWeight: body.spoolWeight,
+        purchasePrice: body.purchasePrice ?? null,
+        priceCurrency: body.priceCurrency?.trim().toUpperCase() || (body.purchasePrice != null ? 'EUR' : null),
         diameter: body.diameter ?? 1.75,
         expirationDate: body.expirationDate ? new Date(body.expirationDate) : null,
         purchaseDate: body.purchaseDate ? new Date(body.purchaseDate) : null,
@@ -182,6 +184,8 @@ router.put('/spools/:id', async (req: Request, res: Response) => {
     if (body.initialWeight !== undefined) data.initialWeight = body.initialWeight;
     if (body.remainingWeight !== undefined) data.remainingWeight = body.remainingWeight;
     if (body.spoolWeight !== undefined) data.spoolWeight = body.spoolWeight;
+    if (body.purchasePrice !== undefined) data.purchasePrice = body.purchasePrice;
+    if (body.priceCurrency !== undefined) data.priceCurrency = body.priceCurrency?.trim().toUpperCase() || null;
     if (body.diameter !== undefined) data.diameter = body.diameter;
     if (body.isActive !== undefined) data.isActive = body.isActive;
     if (body.expirationDate !== undefined) data.expirationDate = body.expirationDate ? new Date(body.expirationDate) : null;

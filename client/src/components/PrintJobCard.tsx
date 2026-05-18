@@ -4,6 +4,7 @@ import { getApiBaseURL } from '../services/api';
 import StatusBadge from './StatusBadge';
 import SpoolColorSwatch from './SpoolColorSwatch';
 import SpoolSelect from './SpoolSelect';
+import { costForGrams, formatMoney } from '../utils/spoolPricing';
 import './PrintJobCard.css';
 
 const STATUS_SELECT_OPTIONS: { value: PrintJobStatus; label: string }[] = [
@@ -53,6 +54,9 @@ export default function PrintJobCard({
   const usageTotal = multiSpoolUsages.reduce((sum, usage) => sum + usage.gramsUsed, 0);
   const usageColors = ['#ffffff', '#111111', '#808080', '#2d6a4f', '#58a6ff', '#f0883e'];
   const unassignedUsage = multiSpoolUsages.reduce((sum, usage) => sum + (usage.spoolId ? 0 : usage.gramsUsed), 0);
+  const usageCost = multiSpoolUsages.reduce((sum, usage) => sum + (costForGrams(usage.spool, usage.gramsUsed) ?? 0), 0);
+  const hasUsageCost = multiSpoolUsages.some((usage) => costForGrams(usage.spool, usage.gramsUsed) != null);
+  const singleSpoolCost = job.spool && job.filamentUsed != null ? costForGrams(job.spool, job.filamentUsed) : null;
 
   return (
     <div className="print-job-card">
@@ -143,6 +147,9 @@ export default function PrintJobCard({
           {job.filamentUsed != null && (
             <span className="meta-item">{Math.round(job.filamentUsed)}g used</span>
           )}
+          {singleSpoolCost != null && job.spool && (
+            <span className="meta-item print-job-cost">{formatMoney(singleSpoolCost, job.spool.priceCurrency)}</span>
+          )}
           <span className="meta-item meta-date">{formatDate(job.startedAt)}</span>
         </div>
         {multiSpoolUsages.length > 0 && (
@@ -161,10 +168,16 @@ export default function PrintJobCard({
             <span className="print-job-usage-summary">
               {job.status === 'completed' ? 'Deducted' : 'Tracked'}: {Math.round(usageTotal)}g
             </span>
+            {hasUsageCost && (
+              <span className="print-job-cost-summary">
+                Cost: {formatMoney(usageCost, multiSpoolUsages.find((usage) => costForGrams(usage.spool, usage.gramsUsed) != null)?.spool?.priceCurrency)}
+              </span>
+            )}
             {multiSpoolUsages.map((usage) => (
               <span key={usage.id} className="print-job-usage-pill">
                 {usage.slotLabel ?? 'Slot'}: {Math.round(usage.gramsUsed)}g
                 {usage.spool ? ` · ${usage.spool.name}` : ' · unassigned'}
+                {costForGrams(usage.spool, usage.gramsUsed) != null ? ` · ${formatMoney(costForGrams(usage.spool, usage.gramsUsed), usage.spool?.priceCurrency)}` : ''}
                 {job.status === 'completed' ? (usage.deductedAt ? ' · saved' : ' · pending') : ''}
                 {onUsageCorrect && (
                   <button

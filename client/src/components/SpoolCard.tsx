@@ -2,6 +2,7 @@ import type { Spool } from '@ha-addon/types';
 import ProgressBar from './ProgressBar';
 import SpoolColorSwatch from './SpoolColorSwatch';
 import SpoolMetaBadges from './SpoolMetaBadges';
+import { formatMoney, formatPricePerKg, remainingValue } from '../utils/spoolPricing';
 import './SpoolCard.css';
 
 interface SpoolCardProps {
@@ -18,6 +19,8 @@ export default function SpoolCard({ spool, onEdit, onDeduct, onArchive, onDelete
   const displayRemaining = spool.liveRemainingWeight ?? spool.remainingWeight;
   const isLow = displayRemaining <= 100;
   const isActive = spool.isActive || !!spool.loadedOnPrinter;
+  const remainingMoney = formatMoney(remainingValue(spool, displayRemaining), spool.priceCurrency);
+  const perKg = formatPricePerKg(spool);
 
   const formatDateTime = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -68,6 +71,12 @@ export default function SpoolCard({ spool, onEdit, onDeduct, onArchive, onDelete
           <span className="weight-total">{Math.round(spool.initialWeight)}g</span>
         </div>
         <ProgressBar value={displayRemaining} max={spool.initialWeight} size="sm" />
+        {(remainingMoney || perKg) && (
+          <div className="spool-price-line">
+            {remainingMoney && <span>{remainingMoney} left</span>}
+            {perKg && <span>{perKg}/kg</span>}
+          </div>
+        )}
         {spool.manufacturer && (
           <span className="spool-manufacturer">{spool.manufacturer}</span>
         )}
