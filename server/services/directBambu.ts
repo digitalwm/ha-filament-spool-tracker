@@ -6,6 +6,7 @@ import { unzipSync } from 'fflate';
 import { getPrismaClient } from '../database';
 import type { Printer } from '../generated/prisma/client';
 import { LOG } from '../utils/logger';
+import { cacheCoverImageBuffer } from './coverImageCache';
 import { applyMultiSpoolDeduction } from './multiSpoolDeduction';
 import { slotLabel, upsertPrinterSlotFromDirect } from './printerSlots';
 
@@ -34,6 +35,7 @@ let client: MqttClient | null = null;
 let status: DirectPrinterStatus = emptyStatus();
 let configuredPrinterId: string | null = process.env.BAMBU_PRINTER_ID?.trim() || null;
 let lastMetadataFile: string | null = null;
+let metadataCoverImage: Buffer | null = null;
 let metadataBusy = false;
 let lastState = '';
 let reconnectLoop: ReturnType<typeof setInterval> | null = null;
@@ -204,6 +206,14 @@ async function processReport(printer: Printer, print: Record<string, unknown>): 
       const activeSlot = await prisma.printerSlot.findFirst({ where: { printerId: printer.id, isActive: true, spoolId: { not: null } } });
       job = await prisma.printJob.create({ data: { printerId: printer.id, spoolId: activeSlot?.spoolId ?? printer.activeSpoolId, projectName: name, status: 'in_progress', progress: status.progress ?? undefined, filamentUsed: status.filamentGrams ?? undefined } });
       logger.info(`Direct printer reports print started: ${name}`);
+    }
+    if (job && !job.projectImage && metadataCoverImage) {
+      const projectImage = cacheCoverImageBuffer(job.id, metadataCoverImage);
+      if (projectImage) {
+        await prisma.printJob.update({ where: { id: job.id }, data: { projectImage } });
+        job.projectImage = projectImage;
+        logger.info(`Cached active printer model preview for ${name}`);
+      }
     }
     if (job) await persistProjectedUsage(prisma, printer, job.id, status.progress ?? 0);
   } else if (activeJob && ['FINISH', 'FAILED', 'IDLE'].includes(state)) {
@@ -376,6 +386,7 @@ function readActiveTrayIndex(print: Record<string, unknown>): number | null {
 async function readMetadata(print: Record<string, unknown>): Promise<void> {
   const filename = stringValue(print.gcode_file);
   if (!filename || !filename.toLowerCase().endsWith('.3mf') || filename === lastMetadataFile || metadataBusy) return;
+  metadataCoverImage = null;
   const { host, accessCode } = directConfig();
   if (!host || !accessCode) return;
   metadataBusy = true;
@@ -404,6 +415,15 @@ async function readMetadata(print: Record<string, unknown>): Promise<void> {
       ftp.close();
     }
     const zip = unzipSync(bytes);
+    const thumbnailPaths = [
+      'Metadata/plate_1.png',
+      'Metadata/bbl_thumbnail.png',
+      'Auxiliaries/.thumbnails/thumbnail_middle.png',
+      'Auxiliaries/.thumbnails/thumbnail_3mf.png',
+      'Auxiliaries/.thumbnails/thumbnail_small.png',
+    ];
+    const thumbnail = thumbnailPaths.map((thumbnailPath) => zip[thumbnailPath]).find((entry) => entry && entry.length > 0);
+    metadataCoverImage = thumbnail ? Buffer.from(thumbnail) : null;
     const configEntry = zip['Metadata/slice_info.config'];
     if (!configEntry) throw new Error('slice_info.config missing from printer 3MF');
     const xml = Buffer.from(configEntry).toString('utf8');
@@ -420,6 +440,7 @@ async function readMetadata(print: Record<string, unknown>): Promise<void> {
     status.slotUsages = mapMetadataFilamentsToSlots(filaments, latestPrint);
     lastMetadataFile = filename;
     logger.info(`Read sliced filament estimate from printer cache for ${filename}`);
+    if (!metadataCoverImage) logger.info(`No model preview image was embedded in ${filename}`);
   } catch (error) {
     logger.warn('Could not read filament estimate from printer cache:', error instanceof Error ? error.message : error);
   } finally {

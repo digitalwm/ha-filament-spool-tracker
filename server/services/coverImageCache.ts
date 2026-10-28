@@ -64,6 +64,20 @@ export async function fetchAndCacheCoverImage(haImagePath: string, jobId: string
   }
 }
 
+/** Cache a preview extracted from the printer's active 3MF project. */
+export function cacheCoverImageBuffer(jobId: string, buffer: Buffer): string | null {
+  if (buffer.length === 0 || buffer.length > 10 * 1024 * 1024) return null;
+  try {
+    const cacheDir = getCacheDir();
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(path.join(cacheDir, `cover-${jobId}.png`), buffer);
+    return `/print-jobs/${jobId}/cover`;
+  } catch (err) {
+    logger.warn('Failed to cache printer cover image:', err);
+    return null;
+  }
+}
+
 /**
  * Resolve cached file path for a job and its content type for serving.
  */
