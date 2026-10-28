@@ -1,9 +1,8 @@
-# HA Filament SpoolTracker
+# SpoolTracker
 
 A standalone filament inventory and print tracker. In standalone mode, it connects directly to a configured Bambu Lab printer over the local network; it does not connect to or publish data to Home Assistant.
 
-Home Assistant community thread:  
-[HA Filament SpoolTracker – Filament & Print Job Tracker for Bambu Lab](https://community.home-assistant.io/t/add-on-ha-filament-spooltracker-filament-print-job-tracker-for-bambu-lab-octoprint-planned/994230)
+This is a standalone app. It does not connect to or publish sensors to Home Assistant.
 
 ## Features
 
@@ -15,6 +14,7 @@ Home Assistant community thread:
 - **Direct Printer Telemetry** -- Reads AMS slots and identities over MQTT, plus sliced filament estimates from the printer's FTPS cache
 - **Dashboard** -- Overview of filament stock, active prints, current active AMS spool, deduction mode, depletion warnings, low filament warnings, and recent print history
 - **Maintenance Tools** -- Sync direct printer slots, commit pending usage rows, clear stale jobs, and backfill audit history
+- **Readable Printer Dashboard** -- Landscape print previews with job progress, ETA, filament estimate, and per-tray usage below
 
 ### UI Preview
 
@@ -59,7 +59,7 @@ Go to the **Spools** tab and click **Add Spool**. Enter the filament type, pick 
 
 ### 3. Start Printing
 
-When a print starts on a connected printer, the add-on automatically creates a print job record. For Bambu Lab AMS printers, the active tray is tracked as the printer changes colors, and filament is deducted from the matching spool for each tray.
+When a print starts on a connected printer, SpoolTracker automatically creates a print job record. For Bambu Lab AMS printers, the active tray is tracked as the printer changes colors, and filament is deducted from the matching spool for each tray.
 
 If a tray cannot be matched to a spool, the dashboard shows a warning. Assign the tray from the **Dashboard** or **Printers** tab, then subsequent usage will be linked to that spool.
 
@@ -74,7 +74,7 @@ The app subscribes to the printer's local MQTT reports. When a print starts:
 3. The active AMS tray is matched to the spool assigned to that tray
 4. As progress and active-tray events arrive, per-slot usage is accumulated and saved
 5. In live deduction mode, saved usage is immediately subtracted from each spool's `remainingWeight`
-6. If no spool can be matched, dashboard and notification warnings prompt you to assign the active tray
+6. If no spool can be matched, the dashboard prompts you to assign the active tray
 
 ### AMS and Multi-Color Prints
 
@@ -132,7 +132,7 @@ The **Settings -> Maintenance** tools provide operational fixes without shell ac
 
 You can manually archive, reactivate, or deduct filament from any spool via the spool card menu.
 
-## Running outside Hass.io (standalone Docker)
+## Standalone Docker
 
 Run SpoolTracker independently from Home Assistant. It reads printer state and filament metadata directly from the configured Bambu printer.
 
@@ -156,7 +156,7 @@ To stop:
 docker compose down
 ```
 
-Then open **http://localhost:30000** for the SpoolTracker UI. The app does not connect to Home Assistant or publish sensors there.
+Then open **http://localhost:30000** for the SpoolTracker UI.
 
 Optional env vars:
 
@@ -177,8 +177,8 @@ Optional env vars:
 
 ### Prerequisites
 
-- Node.js 18+
-- pnpm 8+
+- Node.js 22.22.2 or newer
+- pnpm 12.16.1 (the project pins this through `packageManager`)
 
 ### Setup
 
@@ -210,6 +210,27 @@ pnpm --filter @ha-addon/server test:deduction
 
 </details>
 
+## Dependency and install-script security
+
+The project commits `pnpm-lock.yaml` and uses frozen-lockfile installs in Docker builds. npm installs have lifecycle scripts disabled by default. pnpm delays newly published versions for 24 hours, blocks unreviewed dependency scripts, and permits only the exact versions listed in `allowBuilds` in `pnpm-workspace.yaml`. Dependency-provided agent skills are not linked into the checkout. Do not enable scripts for every dependency. Review a package and its script before adding an allowlist entry, then update the lockfile and run `pnpm audit`.
+
+Routine dependency maintenance:
+
+```bash
+pnpm update -r
+pnpm audit
+pnpm build
+```
+
+## Security reports
+
+Please report vulnerabilities through [GitHub's private vulnerability reporting](https://github.com/digitalwm/ha-filament-spool-tracker/security/advisories/new) rather than posting exploit details in a public issue.
+
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).
+
+## Project guides
+
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)

@@ -157,7 +157,7 @@ function num(value: unknown): number | null {
 
 function statusFromPrint(print: Record<string, unknown>): DirectPrinterStatus {
   const ams = print.ams as Record<string, unknown> | undefined;
-  const activeRaw = num(print.tray_now ?? ams?.tray_now);
+  const activeRaw = readActiveTrayIndex(print);
   const ext = activeRaw === 254 || activeRaw === 255;
   const model = stringValue(print.subtask_name) ?? stringValue(print.gcode_file);
   const filename = stringValue(print.gcode_file);
@@ -317,7 +317,7 @@ async function updateSlots(printer: Printer, print: Record<string, unknown>): Pr
   const prisma = getPrismaClient();
   if (!prisma) return;
   const ams = print.ams as Record<string, unknown> | undefined;
-  const activeIndex = num(print.tray_now ?? ams?.tray_now);
+  const activeIndex = readActiveTrayIndex(print);
   const trays = extractTrays(print);
   const slotSignature = JSON.stringify([
     activeIndex,
@@ -350,6 +350,17 @@ async function updateSlots(printer: Printer, print: Record<string, unknown>): Pr
   if (activeIndex === 254 || activeIndex === 255) {
     await upsertPrinterSlotFromDirect(prisma, printer, { sourceType: 'external', amsIndex: -1, trayIndex: 0, active: true, empty: false, filamentType: 'External' });
   }
+}
+
+/**
+ * The printer reports the loaded tray in the nested AMS status. Some firmware
+ * also sends a top-level `print.tray_now` value which can be stale or refer to
+ * a different tray context. Prefer the AMS-reported value when present so an
+ * attached AMS spool is not shown as the external spool.
+ */
+function readActiveTrayIndex(print: Record<string, unknown>): number | null {
+  const ams = print.ams as Record<string, unknown> | undefined;
+  return num(ams?.tray_now) ?? num(print.tray_now);
 }
 
 async function readMetadata(print: Record<string, unknown>): Promise<void> {

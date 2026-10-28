@@ -174,6 +174,7 @@ export default function AMSVisualTrayBoard({
             <div className="ams-tray-top">
               <span className="ams-tray-number">{trayNumber(slot)}</span>
               {slot.isActive && <span className="ams-tray-live">Using</span>}
+              {!slot.isActive && slot.sourceType === 'external' && <span className="ams-tray-state">Not active</span>}
               {mismatch && <span className="ams-tray-mismatch-label">Check</span>}
             </div>
             <div className="ams-tray-visual">
@@ -191,7 +192,7 @@ export default function AMSVisualTrayBoard({
             </div>
             <div className="ams-tray-main">
               <span className="ams-tray-name">
-                {slot.spool?.name ?? (slot.isEmpty ? 'Empty' : slot.filamentType ?? 'Unassigned')}
+                {slot.spool?.name ?? (slot.isEmpty ? 'Empty' : slot.sourceType === 'external' ? 'No spool assigned' : slot.filamentType ?? 'Unassigned')}
               </span>
               <span className="ams-tray-meta">
                 {remainingLabel(slot)} left

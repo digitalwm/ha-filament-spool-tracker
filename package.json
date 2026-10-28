@@ -1,7 +1,19 @@
 {
   "name": "ha-filament-spooltracker",
-  "version": "0.1.39",
-  "description": "Track 3D printer filament spool usage with Bambu Lab integration for Home Assistant",
+  "version": "0.1.40",
+  "description": "Standalone filament inventory and print tracking for Bambu Lab printers",
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=22.22.2"
+  },
+  "allowScripts": {
+    "@prisma/client@7.10.1": false,
+    "@prisma/engines@7.10.1": true,
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.28.2": true,
+    "prisma@7.10.1": true,
+    "simple-git-hooks@2.14.0": true
+  },
   "main": "server/index.js",
   "scripts": {
     "dev": "pnpm -r --parallel dev",
@@ -29,13 +41,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "concurrently": "^9.2.1",
-    "eslint": "^10.0.3",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
-    "globals": "^17.4.0",
-    "simple-git-hooks": "^2.13.0",
-    "typescript-eslint": "^8.56.1"
+    "concurrently": "^9.2.5",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.13.0",
+    "simple-git-hooks": "^2.14.0",
+    "typescript-eslint": "^8.72.1"
   },
   "license": "MIT"
 }

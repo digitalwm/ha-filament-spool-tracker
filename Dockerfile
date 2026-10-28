@@ -5,8 +5,8 @@ ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:latest
 # Node bits must match the image CPU (aarch64, amd64, …). Do NOT pin ARG TARGETPLATFORM to
 # linux/amd64 — Supervisor builds with `--platform linux/arm64` but does not pass TARGETPLATFORM;
 # a wrong default yields amd64 Node on arm64 and `Exec format error` when RUN invokes node.
-# With buildx, `FROM node:…` inherits the request `--platform` for this stage (same as BASE_FROM).
-FROM node:20-alpine AS node_upstream
+# The official image follows the requested build architecture and provides a current LTS Node/npm.
+FROM node:24.22.1-alpine AS node_upstream
 
 # ---------------------------------------------------------------------------
 # Shared stack: Home Assistant OS + Node + pnpm — used by builder and runtime.
@@ -24,7 +24,7 @@ COPY --from=node_upstream /usr/local/bin/node /usr/local/bin/node
 COPY --from=node_upstream /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
-    && npm install -g pnpm@10
+    && npm install --global --ignore-scripts --no-audit --no-fund npm@12.2.1 pnpm@12.16.1
 
 # ---------------------------------------------------------------------------
 # Build stage — extends base with toolchain only (not shipped in final image).
@@ -41,8 +41,8 @@ COPY server/package.json ./server/
 COPY client/package.json ./client/
 COPY types/package.json ./types/
 
-# Install dependencies (handle lockfile version differences)
-RUN pnpm install --force || pnpm install
+# Resolve only the reviewed lockfile graph and fail closed if it drifts.
+RUN pnpm install --frozen-lockfile --ignore-scripts=false
 
 # Copy source code
 COPY server/ ./server/

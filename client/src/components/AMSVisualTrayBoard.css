@@ -65,6 +65,7 @@
 }
 
 .ams-tray-live,
+.ams-tray-state,
 .ams-tray-mismatch-label {
   font-size: 10px;
   font-weight: 700;
@@ -74,6 +75,10 @@
 
 .ams-tray-live {
   color: var(--accent-primary);
+}
+
+.ams-tray-state {
+  color: var(--text-muted);
 }
 
 .ams-tray-mismatch-label {

@@ -3,10 +3,23 @@ packages:
   - server
   - types
 
-onlyBuiltDependencies:
-  - '@prisma/client'
-  - '@prisma/engines'
-  - better-sqlite3
-  - esbuild
-  - prisma
-  - simple-git-hooks
+minimumReleaseAge: 1440
+blockExoticSubdeps: true
+strictDepBuilds: true
+verifyDepsBeforeRun: false
+skills:
+  # Never link agent instructions shipped inside third-party dependencies into this checkout.
+  dirs: []
+
+# Only packages whose native/client setup is required by this workspace may run install scripts.
+# Keep these version-specific and review them whenever the dependency lockfile changes.
+allowBuilds:
+  '@prisma/client@7.10.1': false
+  '@prisma/engines@7.10.1': true
+  better-sqlite3@12.11.1: true
+  esbuild@0.28.2: true
+  prisma@7.10.1: true
+  simple-git-hooks@2.14.0: true
+
+overrides:
+  'browserslist@<4.28.7': 4.28.7
