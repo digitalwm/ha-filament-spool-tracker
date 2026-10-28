@@ -31,7 +31,7 @@ export default function AddPrinterModal({ onSave, onClose }: AddPrinterModalProp
         </div>
         <form className="modal-form" onSubmit={handleSubmit}>
           <p className="modal-hint">
-            Use this when HA is not connected or discovery didn&apos;t find your printer. Entity prefix must match your Bambu Lab entity IDs in Home Assistant.
+            Add the printer record here. Its direct LAN connection is configured in the SpoolTracker deployment environment.
           </p>
           <div className="form-group">
             <label>Name</label>
@@ -44,7 +44,7 @@ export default function AddPrinterModal({ onSave, onClose }: AddPrinterModalProp
             <span className="form-hint">Optional — defaults to entity prefix with spaces</span>
           </div>
           <div className="form-group">
-            <label>Entity Prefix *</label>
+            <label>Printer Key *</label>
             <input
               required
               type="text"
@@ -53,7 +53,7 @@ export default function AddPrinterModal({ onSave, onClose }: AddPrinterModalProp
               placeholder="e.g., bambu_x1c_01s"
             />
             <span className="form-hint">
-              From your HA entity_id before <code>_print_status</code>. Example: <code>sensor.bambu_x1c_01s_print_status</code> → <code>bambu_x1c_01s</code>
+              Stable identifier for this printer record. Use the same value when associating the direct printer configuration.
             </span>
           </div>
           <div className="form-group">

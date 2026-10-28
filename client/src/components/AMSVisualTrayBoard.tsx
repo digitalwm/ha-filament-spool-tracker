@@ -64,6 +64,60 @@ function colorDistance(a: string | null, b: string | null): number | null {
   );
 }
 
+type ColorFamily = 'red' | 'orange' | 'yellow' | 'green' | 'cyan' | 'blue' | 'purple' | 'pink' | 'brown' | 'black' | 'gray' | 'white';
+
+function colorFamilyFromName(value: string | null | undefined): ColorFamily | null {
+  const name = (value ?? '').trim().toLowerCase();
+  if (!name) return null;
+  if (/black|charcoal/.test(name)) return 'black';
+  if (/white|ivory|cream/.test(name)) return 'white';
+  if (/gray|grey|silver/.test(name)) return 'gray';
+  if (/brown|tan|beige|wood/.test(name)) return 'brown';
+  if (/red|crimson|scarlet|burgundy|maroon/.test(name)) return 'red';
+  if (/orange|copper/.test(name)) return 'orange';
+  if (/yellow|gold|amber/.test(name)) return 'yellow';
+  if (/green|lime|olive/.test(name)) return 'green';
+  if (/cyan|teal|turquoise|aqua/.test(name)) return 'cyan';
+  if (/blue|navy|azure/.test(name)) return 'blue';
+  if (/purple|violet|magenta/.test(name)) return 'purple';
+  if (/pink|rose/.test(name)) return 'pink';
+  return null;
+}
+
+function colorFamilyFromHex(value: string | null): ColorFamily | null {
+  const rgb = parseRgb(value);
+  if (!rgb) return null;
+  const r = rgb.r / 255;
+  const g = rgb.g / 255;
+  const b = rgb.b / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  const lightness = (max + min) / 2;
+  const saturation = delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+
+  if (saturation < 0.12) {
+    if (lightness < 0.18) return 'black';
+    if (lightness > 0.88) return 'white';
+    return 'gray';
+  }
+
+  let hue = 0;
+  if (max === r) hue = ((g - b) / delta) % 6;
+  else if (max === g) hue = (b - r) / delta + 2;
+  else hue = (r - g) / delta + 4;
+  hue = (hue * 60 + 360) % 360;
+
+  if (hue < 15 || hue >= 345) return 'red';
+  if (hue < 45) return 'orange';
+  if (hue < 70) return 'yellow';
+  if (hue < 165) return 'green';
+  if (hue < 200) return 'cyan';
+  if (hue < 255) return 'blue';
+  if (hue < 300) return 'purple';
+  return 'pink';
+}
+
 function hasMismatch(slot: PrinterSlot): boolean {
   if (!slot.spool || slot.isEmpty) return false;
   const typeMismatch =
@@ -73,7 +127,11 @@ function hasMismatch(slot: PrinterSlot): boolean {
   const trayHex = normalizeHex(slot.colorHex);
   const spoolHex = normalizeHex(slot.spool.colorHex);
   const distance = colorDistance(trayHex, spoolHex);
-  const colorMismatch = distance != null && distance > 48;
+  const detectedFamily = colorFamilyFromHex(trayHex);
+  const savedFamily = colorFamilyFromName(slot.spool.color);
+  const colorMismatch = detectedFamily && savedFamily
+    ? detectedFamily !== savedFamily
+    : distance != null && distance > 48;
   return typeMismatch || colorMismatch;
 }
 

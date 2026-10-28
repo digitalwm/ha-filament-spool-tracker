@@ -241,7 +241,7 @@ function upsertDataFromState(
     isActive: activeOverride ?? asBoolean(attrs.active) ?? false,
     isEmpty,
     tagUid: isExternal ? null : normalizeTagUid(attrs.tag_uid),
-    trayUuid: isExternal ? null : asString(attrs.tray_uuid),
+    trayUuid: isExternal ? null : normalizeTagUid(attrs.tray_uuid),
     filamentId: isExternal ? null : asString(attrs.filament_id),
     filamentType: isExternal ? 'Empty' : asString(attrs.type) ?? (isEmpty ? 'Empty' : asString(state.state)),
     colorHex: isExternal ? null : normalizeColor(attrs.color),
@@ -301,6 +301,61 @@ export async function syncPrinterSlotsFromHA(prisma: PrismaClient, printer: Prin
     where: { printerId: printer.id },
     orderBy: [{ sourceType: 'asc' }, { amsIndex: 'asc' }, { trayIndex: 'asc' }],
     include: { spool: true },
+  });
+}
+
+export async function upsertPrinterSlotFromDirect(
+  prisma: PrismaClient,
+  printer: Printer,
+  slot: {
+    sourceType: 'ams' | 'external';
+    amsIndex: number;
+    trayIndex: number;
+    active: boolean;
+    empty: boolean;
+    tagUid?: string | null;
+    trayUuid?: string | null;
+    filamentId?: string | null;
+    filamentType?: string | null;
+    colorHex?: string | null;
+    trayWeight?: number | null;
+    remainPercent?: number | null;
+  },
+): Promise<void> {
+  const identity: SlotIdentity = { ...slot, slotLabel: slotLabel(slot) };
+  const data: Prisma.PrinterSlotUncheckedCreateInput = {
+    printerId: printer.id,
+    sourceType: slot.sourceType,
+    amsIndex: slot.amsIndex,
+    trayIndex: slot.trayIndex,
+    slotLabel: identity.slotLabel,
+    entityId: null,
+    isActive: slot.active,
+    isEmpty: slot.empty,
+    tagUid: normalizeTagUid(slot.tagUid),
+    trayUuid: normalizeTagUid(slot.trayUuid),
+    filamentId: asString(slot.filamentId),
+    filamentType: slot.filamentType ?? (slot.empty ? 'Empty' : null),
+    colorHex: normalizeColor(slot.colorHex),
+    trayWeight: slot.trayWeight ?? null,
+    remainPercent: slot.remainPercent ?? null,
+  };
+  const spoolId = await resolveSpoolIdForSlot(prisma, printer.id, identity, data);
+  await prisma.printerSlot.upsert({
+    where: stableSlotWhere(printer.id, identity),
+    create: { ...data, ...(spoolId ? { spoolId } : {}) },
+    update: {
+      ...(spoolId ? { spoolId } : {}),
+      isActive: data.isActive,
+      isEmpty: data.isEmpty,
+      tagUid: data.tagUid,
+      trayUuid: data.trayUuid,
+      filamentId: data.filamentId,
+      filamentType: data.filamentType,
+      colorHex: data.colorHex,
+      trayWeight: data.trayWeight,
+      remainPercent: data.remainPercent,
+    },
   });
 }
 

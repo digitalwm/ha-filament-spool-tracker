@@ -4,11 +4,11 @@ import { LOG } from '../utils/logger';
 import { getHAWebSocketUrl } from '../utils/haUrl';
 import { fetchAndCacheCoverImage } from './coverImageCache';
 import { isNotificationEnabled, sendNotification } from './notifications';
-import { publishAllSpooltrackerHASensors } from './haSensors';
 import { fetchHAEntityState, fetchHAEntityValue, fetchHAState, fetchHAStates } from './haState';
 import { applyMultiSpoolDeduction, readPrintWeightUsages } from './multiSpoolDeduction';
 import { slotLabel, syncPrinterSlotsFromHA, upsertActiveSlotFromHAState, type SlotIdentity, type SlotUsage } from './printerSlots';
 import { commitUndeductedUsageRows } from './spoolUsageCommit';
+import { isDirectPrinterId } from './directBambu';
 
 const logger = LOG('HA_INTEGRATION');
 
@@ -201,6 +201,14 @@ async function handleStateChange(data: {
     (PRINT_STATUS_STATES.has(state ?? '') && /^(p1|p2|p2s|x1|x1c|a1|a1m|h2|p1s)(_|$)/i.test(prefix));
 
   if (!isBambu) return;
+
+  const directPrinterId = process.env.BAMBU_PRINTER_ID?.trim();
+  if (directPrinterId) {
+    const prisma = getPrismaClient();
+    const directPrinter = prisma ? await prisma.printer.findUnique({ where: { id: directPrinterId }, select: { entityPrefix: true, haDeviceId: true } }) : null;
+    const directPrefix = directPrinter?.entityPrefix || directPrinter?.haDeviceId;
+    if (directPrefix && entity_id.toLowerCase().includes(directPrefix.toLowerCase())) return;
+  }
 
   if (entity_id.endsWith('_print_status')) {
     logger.debug(`Print status event: entity_id=${entity_id} state=${state} isBambu=${isBambu} prefix=${prefix}`);
@@ -413,6 +421,8 @@ async function handlePrintStatusChange(
   if (newStatus === oldStatus) return;
 
   const printerPrefix = entityId.replace(/_print_status$/, '').replace(/^sensor\./, '');
+  const associatedPrinter = await prisma.printer.findFirst({ where: { entityPrefix: { contains: printerPrefix } }, select: { id: true } });
+  if (associatedPrinter && isDirectPrinterId(associatedPrinter.id)) return;
 
   const isPrinting = newStatus === 'running' || newStatus === 'printing';
   const isFinished = newStatus === 'finish' || newStatus === 'finished' || newStatus === 'completed' || newStatus === 'idle';
@@ -717,7 +727,6 @@ async function onPrintFinished(
     logger.info(`Print ${status}: "${job.projectName}"`);
 
     // Spool remaining weight may have changed; refresh the HA sensor.
-    await publishAllSpooltrackerHASensors();
   } catch (error) {
     logger.error('Failed to log print finish:', error);
   }
@@ -738,6 +747,7 @@ async function reconcileInProgressJobs(): Promise<void> {
     for (const job of inProgress) {
       const printer = job.printer;
       if (!printer) continue;
+      if (isDirectPrinterId(printer.id)) continue;
       await commitUndeductedUsageRows(prisma, job.id);
       const prefix = printer.entityPrefix || printer.haDeviceId;
       if (!prefix) continue;
@@ -795,6 +805,7 @@ async function reconcileActivePrints(): Promise<void> {
       const prefix = statusState.entity_id.replace(/^sensor\./, '').replace(/_print_status$/, '');
       const printer = await findPrinterByPrefix(prefix);
       if (!printer) continue;
+      if (isDirectPrinterId(printer.id)) continue;
 
       const existing = await prisma.printJob.findFirst({
         where: { printerId: printer.id, status: 'in_progress' },

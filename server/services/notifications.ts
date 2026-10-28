@@ -1,7 +1,6 @@
 import { LOG } from '../utils/logger';
 import { getHABaseUrl } from '../utils/haUrl';
 import { getPrismaClient } from '../database';
-import { publishAllSpooltrackerHASensors } from './haSensors';
 
 const logger = LOG('NOTIFY');
 
@@ -152,7 +151,6 @@ export function startPeriodicChecks(): void {
     await checkExpiringSpools();
     await checkUnassignedJobs();
     await checkStuckInProgressJobs();
-    await publishAllSpooltrackerHASensors();
   }, 6 * 60 * 60 * 1000); // every 6 hours
 
   logger.info('Periodic notification checks started (every 6 hours)');

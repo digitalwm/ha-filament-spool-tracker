@@ -3,7 +3,6 @@ import { LOG } from '../utils/logger';
 import { getHABaseUrl } from '../utils/haUrl';
 import { getPrismaClient } from '../database';
 import { assignActiveSpoolToPrinter, AssignSpoolError } from '../services/assignActiveSpool';
-import { publishAllSpooltrackerHASensors } from '../services/haSensors';
 import { discoverBambuPrinters } from '../services/haDiscovery';
 
 const logger = LOG('HA');
@@ -127,7 +126,6 @@ router.post('/ha/set-active-spool', async (req: Request, res: Response) => {
 
   try {
     const printer = await assignActiveSpoolToPrinter(prisma, printerId, spoolId);
-    await publishAllSpooltrackerHASensors();
     res.json(printer);
   } catch (err) {
     if (err instanceof AssignSpoolError) {

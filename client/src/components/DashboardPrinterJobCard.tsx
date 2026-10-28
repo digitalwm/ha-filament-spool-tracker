@@ -195,7 +195,7 @@ export default function DashboardPrinterJobCard({ job, live, loadedSpoolRemainin
             </span>
           ) : null}
           {totalGrams != null && (
-            <span className="meta-item" title="From printer / Home Assistant">
+            <span className="meta-item" title="Sliced filament estimate from the printer">
               {Math.round(totalGrams)}g total
             </span>
           )}

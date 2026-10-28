@@ -24,9 +24,12 @@
     "@ha-addon/types": "workspace:*",
     "@prisma/adapter-better-sqlite3": "^7.4.0",
     "@prisma/client": "^7.4.0",
+    "basic-ftp": "^6.2.3",
     "cors": "^2.8.6",
     "dotenv": "^17.3.0",
     "express": "^5.2.0",
+    "fflate": "^0.8.3",
+    "mqtt": "^5.16.1",
     "prisma": "^7.4.0",
     "ws": "^8.19.0"
   },

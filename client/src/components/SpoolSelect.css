@@ -84,7 +84,7 @@
   min-width: 100%;
   width: max-content;
   max-width: min(520px, calc(100vw - 24px));
-  margin: 4px 0 0;
+  margin: 0;
   padding: 4px 0;
   list-style: none;
   background: var(--bg-secondary);
@@ -94,7 +94,7 @@
   max-height: 240px;
   overflow-y: auto;
   overflow-x: hidden;
-  z-index: 100;
+  z-index: 1000;
 }
 
 .spool-select-option {
@@ -126,6 +126,37 @@
   font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
+}
+
+.spool-select-action-row {
+  border-top: 1px solid var(--border-color);
+  margin-top: 4px;
+  padding: 4px 6px 2px;
+}
+
+.spool-select-action {
+  width: 100%;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-secondary));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.spool-select-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-primary) 18%, var(--bg-secondary));
+}
+
+.spool-select-action:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .spool-select-label-weight {

@@ -1,9 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { getPrismaClient } from '../database';
 import { LOG } from '../utils/logger';
-import { fetchEntityState } from '../services/haIntegration';
-import { fetchHAStates } from '../services/haState';
 import { getLiveUsedBySpoolId } from '../services/liveSpoolUsage';
+import { getDirectPrinterStatus } from '../services/directBambu';
 
 const logger = LOG('DASHBOARD');
 const router: Router = Router();
@@ -76,9 +75,7 @@ router.get('/dashboard/stats', async (_req: Request, res: Response) => {
 
     const printerJobLiveMetrics: Record<string, { eta: string | null; filamentGrams: string | null }> = {};
     const liveUsedBySpoolId = await getLiveUsedBySpoolId(prisma);
-    const token = process.env.SUPERVISOR_TOKEN;
-    if (token && activeInProgressPrintJobs.length > 0) {
-      const allHaStates = await fetchHAStates();
+    if (activeInProgressPrintJobs.length > 0) {
       const latestByPrinter = new Map<string, (typeof activeInProgressPrintJobs)[0]>();
       for (const j of activeInProgressPrintJobs) {
         if (!j.printerId || !j.printer) continue;
@@ -89,20 +86,16 @@ router.get('/dashboard/stats', async (_req: Request, res: Response) => {
         [...latestByPrinter.entries()].map(async ([printerId, job]) => {
           const printer = job.printer;
           if (!printer) return;
-          const prefix = printer.entityPrefix || printer.haDeviceId;
-          if (!prefix) return;
-          const weightEntity = printer.entityPrintWeight ?? `sensor.${prefix}_print_weight`;
-          const progressEntity = printer.entityPrintProgress ?? `sensor.${prefix}_print_progress`;
-          const remainingEntity = `sensor.${prefix}_remaining_time`;
-          let [filamentGrams, progressRaw, eta] = await Promise.all([
-            fetchEntityState(weightEntity),
-            fetchEntityState(progressEntity),
-            fetchEntityState(remainingEntity),
-          ]);
-          if (progressRaw == null) {
-            progressRaw = allHaStates.find((s) => s.entity_id.toLowerCase().endsWith('_print_progress'))?.state ?? null;
+          const direct = getDirectPrinterStatus(printer.id);
+          if (direct) {
+            const mins = direct.remainingMinutes;
+            const eta = mins == null ? null : `${Math.floor(mins / 60)}:${String(Math.floor(mins % 60)).padStart(2, '0')}`;
+            printerJobLiveMetrics[printerId] = {
+              eta,
+              filamentGrams: direct.filamentGrams == null ? null : String(direct.filamentGrams),
+            };
+            return;
           }
-          printerJobLiveMetrics[printerId] = { eta, filamentGrams };
         }),
       );
     }

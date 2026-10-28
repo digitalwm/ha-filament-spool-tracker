@@ -8,9 +8,7 @@ import { ingressMiddleware } from './middleware/ingressMiddleware';
 import { requestLogger } from './middleware/requestLogger';
 import routes from './routes';
 import { LOG } from './utils/logger';
-import { startHAIntegration } from './services/haIntegration';
-import { startPeriodicChecks } from './services/notifications';
-import { publishAllSpooltrackerHASensors } from './services/haSensors';
+import { startDirectBambuIntegration } from './services/directBambu';
 
 const logger = LOG('SERVER');
 
@@ -22,26 +20,7 @@ function logStartupEndpoints(listenPort: number): void {
   logger.info('--- SpoolTracker endpoints ---');
   logger.info(`Listening on port ${p} (this process)`);
 
-  if (process.env.HOME_ASSISTANT === 'true') {
-    const hostname = process.env.ADDON_HOSTNAME;
-    const ingress = process.env.ADDON_INGRESS_URL;
-
-    if (hostname) {
-      logger.info(
-        `API on supervisor Docker network (e.g. rest_command): http://${hostname}:${p}/api`,
-      );
-    } else {
-      logger.info(
-        `API: http://127.0.0.1:${p}/api — use your host IP and published port in rest_command if Home Assistant is not on this container network`,
-      );
-    }
-
-    if (ingress) {
-      logger.info(`Ingress (sidebar web UI): ${ingress}`);
-    }
-  } else {
-    logger.info(`API: http://127.0.0.1:${p}/api`);
-  }
+  logger.info(`API: http://127.0.0.1:${p}/api`);
 
   logger.info('------------------------------');
 }
@@ -62,7 +41,7 @@ app.use(express.json());
 app.use('/api', requestLogger);
 app.use(ingressMiddleware);
 
-const isProduction = process.env.NODE_ENV === 'production' || process.env.HOME_ASSISTANT === 'true';
+const isProduction = process.env.NODE_ENV === 'production';
 if (isProduction) {
   const clientPath = process.env.CLIENT_PATH || path.join(process.cwd(), '../client');
   const staticPath = path.join(clientPath, 'dist');
@@ -86,14 +65,8 @@ async function startServer() {
   const server = app.listen(port, () => {
     logStartupEndpoints(port);
 
-    startHAIntegration().catch((err) =>
-      logger.warn('HA integration failed to start:', err)
-    );
-    startPeriodicChecks();
-
-    // Publish initial HA sensors so Home Assistant has data immediately.
-    publishAllSpooltrackerHASensors().catch((err) =>
-      logger.warn('Failed to publish SpoolTracker HA sensors on startup:', err)
+    startDirectBambuIntegration().catch((err) =>
+      logger.warn('Direct printer integration failed to start:', err)
     );
 
     logger.info('Startup completed successfully');

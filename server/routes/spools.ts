@@ -3,7 +3,6 @@ import { getPrismaClient } from '../database';
 import { LOG } from '../utils/logger';
 import type { SpoolCreateRequest, SpoolUpdateRequest, DeductionRequest } from '@ha-addon/types';
 import { normalizeSpoolColorStyle } from '@ha-addon/types';
-import { publishAllSpooltrackerHASensors } from '../services/haSensors';
 import { assignActiveSpoolToPrinter, AssignSpoolError } from '../services/assignActiveSpool';
 import { getLiveUsedBySpoolId } from '../services/liveSpoolUsage';
 import { adjustSpoolWeight } from '../services/spoolUsageCommit';
@@ -123,7 +122,6 @@ router.post('/spools/:id/audit/:logId/undo', async (req: Request, res: Response)
       metadata: { originalAuditId: log.id },
     });
     const updated = await prisma.spool.findUniqueOrThrow({ where: { id: spoolId } });
-    await publishAllSpooltrackerHASensors();
     res.json(updated);
   } catch (error) {
     logger.error('Failed to undo audit log:', error);
@@ -159,7 +157,6 @@ router.post('/spools', async (req: Request, res: Response) => {
         notes: body.notes,
       },
     });
-    await publishAllSpooltrackerHASensors();
     res.status(201).json(spool);
   } catch (error) {
     logger.error('Failed to create spool:', error);
@@ -199,7 +196,6 @@ router.put('/spools/:id', async (req: Request, res: Response) => {
       where: { id: req.params.id as string },
       data,
     });
-    await publishAllSpooltrackerHASensors();
     res.json(spool);
   } catch (error) {
     logger.error('Failed to update spool:', error);
@@ -262,7 +258,6 @@ router.post('/spools/:id/match-rfid', async (req: Request, res: Response) => {
       return updatedTarget;
     });
 
-    await publishAllSpooltrackerHASensors();
     res.json(matched);
   } catch (error) {
     logger.error('Failed to match RFID spool:', error);
@@ -303,7 +298,6 @@ router.post('/spools/:id/deduct', async (req: Request, res: Response) => {
       reason: req.body?.reason ?? null,
     });
     const updated = await prisma.spool.findUniqueOrThrow({ where: { id: spool.id } });
-    await publishAllSpooltrackerHASensors();
     res.json(updated);
   } catch (error) {
     logger.error('Failed to deduct filament:', error);
@@ -320,7 +314,6 @@ router.post('/spools/:id/archive', async (req: Request, res: Response) => {
       where: { id: req.params.id as string },
       data: { isActive: false, archivedAt: new Date() },
     });
-    await publishAllSpooltrackerHASensors();
     res.json(spool);
   } catch (error) {
     logger.error('Failed to archive spool:', error);
@@ -337,7 +330,6 @@ router.post('/spools/:id/deactivate', async (req: Request, res: Response) => {
     const loaded = await prisma.printer.findFirst({ where: { activeSpoolId: id }, select: { id: true } });
     if (loaded) return res.status(409).json({ error: 'Remove this spool from its printer before deactivating it' });
     const spool = await prisma.spool.update({ where: { id }, data: { isActive: false } });
-    await publishAllSpooltrackerHASensors();
     res.json(spool);
   } catch (error) {
     logger.error('Failed to deactivate spool:', error);
@@ -381,7 +373,6 @@ router.post('/spools/:id/activate', async (req: Request, res: Response) => {
       loadedOnPrinter: loaded ? { id: loaded.id, name: loaded.name } : null,
     };
 
-    await publishAllSpooltrackerHASensors();
     res.json(payload);
   } catch (error) {
     logger.error('Failed to activate spool:', error);

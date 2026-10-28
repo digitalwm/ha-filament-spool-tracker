@@ -1,12 +1,7 @@
 import type { PrismaClient, Printer } from '../generated/prisma/client';
 import { LOG } from '../utils/logger';
-import { fetchHAState, fetchHAStates } from './haState';
-import {
-  ensureSlotsForUsages,
-  findSlotForUsage,
-  parsePrintWeightSlotUsages,
-  type SlotUsage,
-} from './printerSlots';
+import { getDirectPrinterStatus, isDirectPrinterId } from './directBambu';
+import { ensureSlotsForUsages, findSlotForUsage, type SlotUsage } from './printerSlots';
 
 const logger = LOG('MULTI_SPOOL');
 
@@ -18,27 +13,20 @@ export type MultiSpoolDeductionResult = {
   primarySpoolId: string | null;
 };
 
-function parseTotalGrams(value: string | null | undefined): number | null {
-  if (value == null) return null;
-  const n = Number(String(value).replace(/g/gi, '').trim());
-  return Number.isFinite(n) && n >= 0 ? n : null;
-}
-
 export async function readPrintWeightUsages(
-  printer: Pick<Printer, 'entityPrefix' | 'haDeviceId' | 'entityPrintWeight'>,
+  printer: Pick<Printer, 'id' | 'entityPrefix' | 'haDeviceId' | 'entityPrintWeight'>,
 ): Promise<{ totalGrams: number | null; usages: SlotUsage[] }> {
-  const prefix = printer.entityPrefix || printer.haDeviceId;
-  const entityId = printer.entityPrintWeight ?? `sensor.${prefix}_print_weight`;
-  let state = await fetchHAState(entityId);
-  if (!state) {
-    const states = await fetchHAStates();
-    state = states.find((s) => s.entity_id.toLowerCase().endsWith('_print_weight')) ?? null;
+  if (isDirectPrinterId(printer.id)) {
+    const live = getDirectPrinterStatus(printer.id);
+    return {
+      totalGrams: live?.filamentGrams ?? null,
+      usages: live?.slotUsages.map((usage) => ({
+        ...usage,
+        slotLabel: usage.sourceType === 'external' ? 'External Spool' : `AMS ${usage.amsIndex + 1} Tray ${usage.trayIndex + 1}`,
+      })) ?? [],
+    };
   }
-  if (!state) return { totalGrams: null, usages: [] };
-  return {
-    totalGrams: parseTotalGrams(state.state),
-    usages: parsePrintWeightSlotUsages(state.attributes),
-  };
+  return { totalGrams: null, usages: [] };
 }
 
 export async function applyMultiSpoolDeduction(

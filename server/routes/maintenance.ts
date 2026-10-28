@@ -1,8 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getPrismaClient } from '../database';
 import { LOG } from '../utils/logger';
-import { updatePrinterDiscoveredEntities } from '../services/haDiscovery';
-import { syncPrinterSlotsFromHA } from '../services/printerSlots';
+import { getDirectPrinterStatus, syncDirectPrinterSlots } from '../services/directBambu';
 import { commitUndeductedUsageRows } from '../services/spoolUsageCommit';
 
 const logger = LOG('MAINTENANCE');
@@ -15,8 +14,8 @@ router.post('/maintenance/resync-entities', async (_req: Request, res: Response)
     const printers = await prisma.printer.findMany();
     let updated = 0;
     for (const printer of printers) {
-      const next = await updatePrinterDiscoveredEntities(prisma, printer);
-      await syncPrinterSlotsFromHA(prisma, next);
+      if (!getDirectPrinterStatus(printer.id)) continue;
+      await syncDirectPrinterSlots(printer);
       updated += 1;
     }
     res.json({ updated });

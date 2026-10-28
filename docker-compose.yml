@@ -1,6 +1,5 @@
-# Run SpoolTracker in Docker outside Hass.io, connected to an existing Home Assistant.
-# 1. Create a Long-Lived Access Token in HA (Profile → Security → Long-Lived Access Tokens).
-# 2. Set HOME_ASSISTANT_URL and SUPERVISOR_TOKEN below or in .env.
+# Run SpoolTracker as a standalone Docker app with direct Bambu LAN access.
+# Configure the direct printer settings below or in .env.
 # 3. Use entrypoint: [] so the base image's /init does not strip env vars.
 # 4. docker compose -f docker-compose.standalone.yml up -d
 # 5. Open http://localhost:3000
@@ -13,13 +12,15 @@ services:
     restart: unless-stopped
     entrypoint: []
     ports:
-      - "3000:3000"
+      - "30000:3000"
     volumes:
       # Bind mount keeps DB and cache on host (e.g. ./data/app.db); override with DATA_PATH in .env
       - ${DATA_PATH:-./data}:/data
     environment:
-      HOME_ASSISTANT_URL: ${HOME_ASSISTANT_URL}
-      SUPERVISOR_TOKEN: ${SUPERVISOR_TOKEN}
+      BAMBU_PRINTER_HOST: ${BAMBU_PRINTER_HOST:-}
+      BAMBU_PRINTER_SERIAL: ${BAMBU_PRINTER_SERIAL:-}
+      BAMBU_PRINTER_ACCESS_CODE: ${BAMBU_PRINTER_ACCESS_CODE:-}
+      BAMBU_PRINTER_ID: ${BAMBU_PRINTER_ID:-}
       PORT: ${PORT:-3000}
       # DATABASE_URL: ${DATABASE_URL:-file:/data/app.db}
       # LOG_LEVEL: ${LOG_LEVEL:-info}

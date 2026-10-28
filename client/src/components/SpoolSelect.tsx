@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { getSpoolColorStyleLabel, normalizeSpoolColorStyle } from '@ha-addon/types';
 import SpoolColorSwatch from './SpoolColorSwatch';
 import './SpoolSelect.css';
@@ -28,6 +29,7 @@ interface SpoolSelectProps {
   /** When set, renders this instead of the default trigger (dot + label). Use to show card-style content. */
   renderTrigger?: (selected: SpoolOption | null) => React.ReactNode;
   className?: string;
+  dropdownAction?: { label: string; onSelect: () => void; disabled?: boolean };
 }
 
 function formatRemaining(weight: number | undefined): string | null {
@@ -58,16 +60,52 @@ export default function SpoolSelect({
   'aria-label': ariaLabel,
   renderTrigger,
   className,
+  dropdownAction,
 }: SpoolSelectProps) {
   const [open, setOpen] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLUListElement>(null);
 
   const selectedSpool: SpoolOption | null = value ? spools.find((s) => s.id === value) ?? null : null;
   const selectedRemainingLabel = formatRemaining(selectedSpool?.liveRemainingWeight ?? selectedSpool?.remainingWeight);
 
   useEffect(() => {
+    if (!open) return;
+    const updateDropdownPosition = () => {
+      const trigger = containerRef.current?.querySelector('.spool-select-trigger');
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const viewportPadding = 12;
+      const maxWidth = Math.min(520, window.innerWidth - viewportPadding * 2);
+      const left = Math.max(viewportPadding, Math.min(rect.left, window.innerWidth - maxWidth - viewportPadding));
+      const below = window.innerHeight - rect.bottom - viewportPadding;
+      const above = rect.top - viewportPadding;
+      const openUp = below < 180 && above > below;
+      setDropdownStyle({
+        position: 'fixed',
+        left,
+        top: openUp ? undefined : rect.bottom + 4,
+        bottom: openUp ? window.innerHeight - rect.top + 4 : undefined,
+        minWidth: Math.min(rect.width, maxWidth),
+        maxWidth,
+        maxHeight: Math.max(100, Math.min(240, openUp ? above : below)),
+        zIndex: 10000,
+      });
+    };
+    updateDropdownPosition();
+    window.addEventListener('resize', updateDropdownPosition);
+    window.addEventListener('scroll', updateDropdownPosition, true);
+    return () => {
+      window.removeEventListener('resize', updateDropdownPosition);
+      window.removeEventListener('scroll', updateDropdownPosition, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (!containerRef.current?.contains(target) && !dropdownRef.current?.contains(target)) {
         setOpen(false);
       }
     };
@@ -77,7 +115,72 @@ export default function SpoolSelect({
     return () => document.removeEventListener('click', handleClickOutside);
   }, [open]);
 
+  const dropdown = open && createPortal(
+    <ul
+      ref={dropdownRef}
+      className="spool-select-dropdown spool-select-dropdown-portal"
+      style={dropdownStyle}
+      role="listbox"
+      aria-activedescendant={value ?? undefined}
+    >
+      <li
+        role="option"
+        aria-selected={!value}
+        className="spool-select-option"
+        onClick={() => {
+          onChange(null);
+          setOpen(false);
+        }}
+      >
+        <span className="spool-select-option-none">{placeholder}</span>
+      </li>
+      {spools.map((spool) => {
+        const remainingLabel = formatRemaining(spool.liveRemainingWeight ?? spool.remainingWeight);
+        return (
+          <li
+            key={spool.id}
+            role="option"
+            aria-selected={value === spool.id}
+            className="spool-select-option"
+            onClick={() => {
+              onChange(spool.id);
+              setOpen(false);
+            }}
+          >
+            <SpoolColorSwatch
+              className="spool-select-dot"
+              colorHex={spool.colorHex}
+              colorStyle={spool.colorStyle}
+              colorName={spool.color}
+            />
+            <span className="spool-select-option-label">
+              {spool.name} ({formatSpoolMaterialStyleSegment(spool)})
+            </span>
+            {remainingLabel && <span className="spool-select-option-weight">{remainingLabel}</span>}
+          </li>
+        );
+      })}
+      {dropdownAction && (
+        <li className="spool-select-action-row">
+          <button
+            type="button"
+            className="spool-select-action"
+            onClick={() => {
+              dropdownAction.onSelect();
+              setOpen(false);
+            }}
+            disabled={dropdownAction.disabled}
+          >
+            {dropdownAction.label}
+          </button>
+        </li>
+      )}
+    </ul>,
+    document.body,
+  );
+
   return (
+    <>
     <div
       ref={containerRef}
       className={`spool-select spool-select-${size} ${open ? 'spool-select-open' : ''} ${className ?? ''}`.trim()}
@@ -123,53 +226,8 @@ export default function SpoolSelect({
           </>
         )}
       </button>
-      {open && (
-        <ul
-          className="spool-select-dropdown"
-          role="listbox"
-          aria-activedescendant={value ?? undefined}
-        >
-          <li
-            role="option"
-            aria-selected={!value}
-            className="spool-select-option"
-            onClick={() => {
-              onChange(null);
-              setOpen(false);
-            }}
-          >
-            <span className="spool-select-option-none">{placeholder}</span>
-          </li>
-          {spools.map((spool) => {
-            const remainingLabel = formatRemaining(spool.liveRemainingWeight ?? spool.remainingWeight);
-            return (
-              <li
-                key={spool.id}
-                role="option"
-                aria-selected={value === spool.id}
-                className="spool-select-option"
-                onClick={() => {
-                  onChange(spool.id);
-                  setOpen(false);
-                }}
-              >
-                <SpoolColorSwatch
-                  className="spool-select-dot"
-                  colorHex={spool.colorHex}
-                  colorStyle={spool.colorStyle}
-                  colorName={spool.color}
-                />
-                <span className="spool-select-option-label">
-                  {spool.name} ({formatSpoolMaterialStyleSegment(spool)})
-                </span>
-                {remainingLabel && (
-                  <span className="spool-select-option-weight">{remainingLabel}</span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
     </div>
+    {dropdown}
+    </>
   );
 }

@@ -1,15 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client';
-import { fetchHAStates } from './haState';
 import { readPrintWeightUsages } from './multiSpoolDeduction';
-
-function parseProgressPercent(value: string | null | undefined): number | null {
-  if (value == null) return null;
-  const s = String(value).trim().replace(/%/g, '');
-  if (s === '' || s === 'unknown' || s === 'unavailable') return null;
-  const n = parseFloat(s);
-  if (Number.isNaN(n)) return null;
-  return Math.min(100, Math.max(0, n));
-}
+import { getDirectPrinterStatus } from './directBambu';
 
 function parseGrams(raw: string | null | undefined): number | null {
   if (raw == null) return null;
@@ -29,8 +20,6 @@ export async function getLiveUsedBySpoolId(prisma: PrismaClient): Promise<Record
 
   if (activeJobs.length === 0) return liveUsedBySpoolId;
 
-  const allHaStates = await fetchHAStates();
-
   for (const job of activeJobs) {
     const printer = job.printer;
     if (!printer) continue;
@@ -39,12 +28,18 @@ export async function getLiveUsedBySpoolId(prisma: PrismaClient): Promise<Record
     const totalGrams = printWeight.totalGrams ?? job.filamentUsed ?? null;
 
     let progress = job.progress;
-    if (progress == null) {
-      const progressState = allHaStates.find((s) => s.entity_id.toLowerCase().endsWith('_print_progress'));
-      progress = parseProgressPercent(progressState?.state) ?? null;
-    }
+    const directStatus = getDirectPrinterStatus(printer.id);
+    if (directStatus?.progress != null) progress = directStatus.progress;
     const progressRatio = progress != null ? Math.min(1, Math.max(0, progress / 100)) : 1;
     const projectedUsed = totalGrams != null && totalGrams > 0 ? totalGrams * progressRatio : null;
+
+    if (directStatus) {
+      for (const usage of job.spoolUsages) {
+        if (usage.deductedAt || !usage.spoolId || usage.gramsUsed <= 0) continue;
+        liveUsedBySpoolId[usage.spoolId] = (liveUsedBySpoolId[usage.spoolId] ?? 0) + usage.gramsUsed;
+      }
+      continue;
+    }
 
     if (job.spoolUsages.length > 0) {
       let persistedUsed = 0;

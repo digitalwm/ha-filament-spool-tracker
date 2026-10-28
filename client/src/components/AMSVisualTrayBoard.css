@@ -133,22 +133,38 @@
   text-align: center;
 }
 
+.ams-tray .spool-select-trigger {
+  align-items: flex-start;
+}
+
+.ams-tray .spool-select-label {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
+.ams-tray .spool-select-chevron {
+  margin-top: 6px;
+}
+
 .ams-tray-name,
 .ams-tray-meta {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .ams-tray-name {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
+  line-height: 1.35;
 }
 
 .ams-tray-meta {
   font-size: 11px;
   color: var(--text-muted);
+  line-height: 1.3;
 }
 
 .ams-board-compact {

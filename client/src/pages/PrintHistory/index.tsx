@@ -262,7 +262,7 @@ export default function PrintHistoryPage() {
       ) : jobs.length === 0 ? (
         <div className="empty-state">
           <h3>No prints recorded yet</h3>
-          <p>Print jobs appear here when detected from Bambu Lab via Home Assistant, or use <strong>Add print manually</strong> when HA is not connected.</p>
+          <p>Print jobs appear here when detected directly from the printer, or use <strong>Add print manually</strong>.</p>
         </div>
       ) : (
         <>

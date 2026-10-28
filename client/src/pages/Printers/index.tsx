@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { printersApi, haApi, spoolsApi } from '@services/api';
-import type { Printer, Spool, HAConnectionStatus, HADiscoveredEntity, PrinterTimelineEvent } from '@ha-addon/types';
+import { printersApi, spoolsApi } from '@services/api';
+import type { Printer, PrinterSlot, Spool, PrinterTimelineEvent } from '@ha-addon/types';
 import EditPrinterModal, { type EditPrinterSaveData } from '@modals/EditPrinterModal';
 import AddPrinterModal from '@modals/AddPrinterModal';
 import ConfirmModal from '@modals/ConfirmModal';
@@ -15,25 +15,22 @@ export default function PrintersPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [printers, setPrinters] = useState<Printer[]>([]);
-  const [haStatus, setHaStatus] = useState<HAConnectionStatus | null>(null);
-  const [discoveredEntities, setDiscoveredEntities] = useState<HADiscoveredEntity[]>([]);
-  const [discovering, setDiscovering] = useState(false);
   const [editingPrinter, setEditingPrinter] = useState<Printer | null>(null);
   const [deletingPrinter, setDeletingPrinter] = useState<Printer | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [spools, setSpools] = useState<Spool[]>([]);
   const [timelines, setTimelines] = useState<Record<string, PrinterTimelineEvent[]>>({});
+  const [imprintingSlotId, setImprintingSlotId] = useState<string | null>(null);
+  const [slotIdentityFeedback, setSlotIdentityFeedback] = useState<{ slotId: string; message: string; error: boolean } | null>(null);
 
   useEffect(() => {
     const loadAll = async () => {
       try {
-        const [printersRes, haStatusRes, spoolsRes] = await Promise.all([
+        const [printersRes, spoolsRes] = await Promise.all([
           printersApi.getAll(),
-          haApi.getStatus(),
           spoolsApi.getAll(),
         ]);
         setPrinters(printersRes.data);
-        setHaStatus(haStatusRes.data);
         setSpools(spoolsRes.data);
         const timelineEntries = await Promise.all(printersRes.data.map((p) => printersApi.getTimeline(p.id).then((r) => [p.id, r.data] as const).catch(() => [p.id, []] as const)));
         setTimelines(Object.fromEntries(timelineEntries));
@@ -73,39 +70,6 @@ export default function PrintersPage() {
     }, 2200);
     return () => window.clearTimeout(t);
   }, [focusPrinterId, printers, setSearchParams]);
-
-  const handleDiscoverEntities = async () => {
-    setDiscovering(true);
-    try {
-      const response = await haApi.getEntities();
-      setDiscoveredEntities(response.data);
-    } catch (err) {
-      console.error('Failed to discover entities:', err);
-    } finally {
-      setDiscovering(false);
-    }
-  };
-
-  const handleRegisterPrinter = async (entity: HADiscoveredEntity) => {
-    try {
-      await printersApi.create({
-        name: entity.deviceName,
-        haDeviceId: entity.deviceId,
-        entityPrefix: entity.entityPrefix ?? entity.deviceId,
-        model: entity.model || undefined,
-        entityPrintStatus: entity.entityPrintStatus ?? undefined,
-        entityTaskName: entity.entityTaskName ?? undefined,
-        entityPrintWeight: entity.entityPrintWeight ?? undefined,
-        entityCoverImage: entity.entityCoverImage ?? undefined,
-        entityPrintStart: entity.entityPrintStart ?? undefined,
-        entityPrintProgress: entity.entityPrintProgress ?? undefined,
-      });
-      const res = await printersApi.getAll();
-      setPrinters(res.data);
-    } catch (err) {
-      console.error('Failed to register printer:', err);
-    }
-  };
 
   const handleAddPrinter = async (data: { name: string; entityPrefix: string; model?: string }) => {
     try {
@@ -168,10 +132,42 @@ export default function PrintersPage() {
   const handleSlotSpoolChange = async (printer: Printer, slotId: string, spoolId: string | null) => {
     try {
       await printersApi.updateSlot(printer.id, slotId, { spoolId });
-      const res = await printersApi.getAll();
-      setPrinters(res.data);
+      const [printersRes, spoolsRes] = await Promise.all([printersApi.getAll(), spoolsApi.getAll()]);
+      setPrinters(printersRes.data);
+      setSpools(spoolsRes.data);
+      setSlotIdentityFeedback(null);
     } catch (err) {
       console.error('Failed to update printer slot:', err);
+    }
+  };
+
+  const hasSlotIdentityConflict = (slot: PrinterSlot) => {
+    if (!slot.spool) return false;
+    const tagConflict = Boolean(slot.tagUid && slot.spool.tagUid && slot.tagUid !== slot.spool.tagUid);
+    const filamentConflict = Boolean(slot.filamentId && slot.spool.filamentId && slot.filamentId !== slot.spool.filamentId);
+    return tagConflict || filamentConflict;
+  };
+
+  const canImprintSlotIdentity = (slot: PrinterSlot) => {
+    if (!slot.spoolId || !slot.spool || (!slot.tagUid && !slot.filamentId) || hasSlotIdentityConflict(slot)) return false;
+    return true;
+  };
+
+  const handleImprintSlotIdentity = async (printer: Printer, slot: PrinterSlot) => {
+    if (!slot.spoolId) return;
+    setImprintingSlotId(slot.id);
+    setSlotIdentityFeedback(null);
+    try {
+      await printersApi.updateSlot(printer.id, slot.id, { spoolId: slot.spoolId });
+      const [printersRes, spoolsRes] = await Promise.all([printersApi.getAll(), spoolsApi.getAll()]);
+      setPrinters(printersRes.data);
+      setSpools(spoolsRes.data);
+      setSlotIdentityFeedback({ slotId: slot.id, message: 'Printer IDs saved to the linked spool.', error: false });
+    } catch (err) {
+      const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      setSlotIdentityFeedback({ slotId: slot.id, message: message ?? 'Could not save the printer IDs to this spool.', error: true });
+    } finally {
+      setImprintingSlotId(null);
     }
   };
 
@@ -186,28 +182,27 @@ export default function PrintersPage() {
     }
   };
 
-  const unregistered = discoveredEntities.filter(
-    (e) => !printers.some((p) => p.haDeviceId === e.deviceId)
-  );
-
   return (
     <div className="printers-page">
-      <h2 className="page-title">Printers</h2>
-      <p className="page-subtitle">Manage your Bambu Lab printers connected to Home Assistant</p>
+      <div className="printers-page-heading">
+        <div>
+          <h2 className="page-title">Printers</h2>
+          <p className="page-subtitle">Manage printer connections, loaded spools, and detected tray identities.</p>
+        </div>
+        <span className="printers-page-count">{printers.length} registered {printers.length === 1 ? 'printer' : 'printers'}</span>
+      </div>
 
       <div className="printers-section">
         <div className="ha-connection-bar">
-          <span className={`ha-dot ${haStatus?.connected ? 'connected' : 'disconnected'}`} />
-          <span>{haStatus?.connected ? 'Connected to Home Assistant' : 'Not connected'}</span>
-          {haStatus?.connected && (
-            <span className="ha-detected">{haStatus.printerCount} printer(s) detected</span>
-          )}
+          <div className="ha-connection-status">
+            <div>
+              <strong>Direct printer connection</strong>
+              <span>Printer telemetry and AMS identities are read directly over the local network.</span>
+            </div>
+          </div>
           <div className="ha-connection-bar-actions">
             <button className="btn btn-secondary btn-sm" onClick={() => setShowAddModal(true)}>
-              Add printer manually
-            </button>
-            <button className="btn btn-primary btn-sm" onClick={handleDiscoverEntities} disabled={discovering}>
-              {discovering ? 'Discovering...' : 'Discover Printers'}
+              Add printer
             </button>
           </div>
         </div>
@@ -215,7 +210,12 @@ export default function PrintersPage() {
 
       {printers.length > 0 && (
         <div className="printers-section">
-          <h3 className="section-title">Registered Printers</h3>
+          <div className="printers-section-heading">
+            <div>
+              <h3 className="section-title">Registered printers</h3>
+              <p>Live assignments and the identifiers reported by each printer.</p>
+            </div>
+          </div>
           <div className="printer-cards">
             {printers.map((printer) => (
               <div key={printer.id} id={`printer-card-${printer.id}`} className="printer-card">
@@ -255,66 +255,65 @@ export default function PrintersPage() {
                   </div>
                 </div>
                 <div className="printer-card-spool">
-                  <span className="printer-card-spool-label">Loaded spool</span>
+                  <span className="printer-card-spool-label">Mounted spool</span>
                   {printer.activeSpool ? (
                     <>
-                      <button
-                        type="button"
-                        className="printer-card-spool-preview"
-                        onClick={() => navigate(`/spools/${printer.activeSpool!.id}`)}
-                      >
-                        <SpoolColorSwatch
-                          className="printer-card-spool-dot"
-                          colorHex={printer.activeSpool.colorHex}
-                          colorStyle={printer.activeSpool.colorStyle}
-                          colorName={printer.activeSpool.color}
-                        />
-                        <span className="printer-card-spool-name">{printer.activeSpool.name}</span>
-                        <span className="printer-card-spool-weight">
-                          {Math.round(printer.activeSpool.remainingWeight)}g / {Math.round(printer.activeSpool.initialWeight)}g
-                        </span>
-                      </button>
+                      <div className="printer-mounted-spool">
+                        <button
+                          type="button"
+                          className="printer-card-spool-preview"
+                          onClick={() => navigate(`/spools/${printer.activeSpool!.id}`)}
+                        >
+                          <SpoolColorSwatch
+                            className="printer-card-spool-dot"
+                            colorHex={printer.activeSpool.colorHex}
+                            colorStyle={printer.activeSpool.colorStyle}
+                            colorName={printer.activeSpool.color}
+                          />
+                          <span className="printer-card-spool-name">{printer.activeSpool.name}</span>
+                          <span className="printer-card-spool-weight">
+                            {Math.round(printer.activeSpool.remainingWeight)}g / {Math.round(printer.activeSpool.initialWeight)}g
+                          </span>
+                        </button>
                         <ProgressBar value={printer.activeSpool.remainingWeight} max={printer.activeSpool.initialWeight} size="sm" />
-                        <SpoolSelect
-                          value={printer.activeSpoolId ?? null}
-                          onChange={(id) => handleLoadedSpoolChange(printer, id)}
-                          spools={spools.filter((s) => s.archivedAt === null)}
-                          placeholder="None"
-                          aria-label="Change loaded spool"
-                        />
+                      </div>
+                      <SpoolSelect
+                        value={printer.activeSpoolId ?? null}
+                        onChange={(id) => handleLoadedSpoolChange(printer, id)}
+                        spools={spools.filter((s) => s.archivedAt === null)}
+                        placeholder="None"
+                        aria-label="Change loaded spool"
+                        className="printer-card-spool-select"
+                      />
                     </>
                   ) : (
                     <SpoolSelect
                       value={null}
                       onChange={(id) => handleLoadedSpoolChange(printer, id)}
-                        spools={spools.filter((s) => s.archivedAt === null)}
+                      spools={spools.filter((s) => s.archivedAt === null)}
                       placeholder="Select spool…"
                       aria-label="Select loaded spool"
+                      className="printer-card-spool-select printer-card-spool-select-empty"
                     />
                   )}
                 </div>
                 <div className="printer-card-slots">
                   <div className="printer-card-slots-header">
-                    <span className="printer-card-spool-label">AMS / feed slots</span>
-                    <span className="printer-slot-health">
-                      {printer.slots?.some((slot) => slot.isActive)
-                        ? `Active: ${printer.slots.find((slot) => slot.isActive)?.slotLabel}`
-                        : 'No active tray'}
-                      {' · '}
-                      {(printer.slots ?? []).filter((slot) => !slot.isEmpty && slot.spoolId).length}/{(printer.slots ?? []).filter((slot) => !slot.isEmpty).length} assigned
-                    </span>
-                    <button type="button" className="btn btn-secondary btn-xs" onClick={() => handleSyncSlots(printer)}>
-                      Sync from HA
-                    </button>
-                    <button type="button" className="btn btn-secondary btn-xs" onClick={() => handleRecoverActivePrint(printer)}>
-                      Recover print
-                    </button>
-                  </div>
-                  <div className="printer-entity-health">
-                    <span>Prefix: {printer.entityPrefix}</span>
-                    <span>{printer.entityPrintStatus ? 'Status entity saved' : 'Status entity missing'}</span>
-                    <span>{printer.entityPrintWeight ? 'Weight entity saved' : 'Weight entity missing'}</span>
-                    <span>{printer.entityPrintProgress ? 'Progress entity saved' : 'Progress entity missing'}</span>
+                    <div className="printer-slots-title">
+                      <span className="printer-card-spool-label">AMS / feed slots</span>
+                      <span className="printer-slot-health">
+                        {printer.slots?.some((slot) => slot.isActive)
+                          ? `Currently using ${printer.slots.find((slot) => slot.isActive)?.slotLabel}`
+                          : 'No active tray detected'}
+                      </span>
+                    </div>
+                    <div className="printer-slot-toolbar">
+                      <span className="printer-slot-assigned">
+                        {(printer.slots ?? []).filter((slot) => !slot.isEmpty && slot.spoolId).length} / {(printer.slots ?? []).filter((slot) => !slot.isEmpty).length} loaded trays linked
+                      </span>
+                      <button type="button" className="btn btn-secondary btn-xs" onClick={() => handleSyncSlots(printer)}>Sync from printer</button>
+                      <button type="button" className="btn btn-secondary btn-xs" onClick={() => handleRecoverActivePrint(printer)}>Recover print</button>
+                    </div>
                   </div>
                   {printer.slots && printer.slots.length > 0 ? (
                     <>
@@ -329,13 +328,22 @@ export default function PrintersPage() {
                         <div key={slot.id} className={`printer-slot-row ${slot.isActive ? 'printer-slot-row-active' : ''}`}>
                           <div className="printer-slot-info">
                             <span className="printer-slot-label">{slot.slotLabel}</span>
-                            <span className="printer-slot-meta">
-                              {slot.filamentType || 'Unknown'}
-                              {slot.colorHex ? ` · ${slot.colorHex}` : ''}
-                              {slot.isEmpty ? ' · empty' : ''}
-                              {slot.tagUid ? ` · Tag ID: ${slot.tagUid}` : ''}
-                              {slot.filamentId ? ` · Filament ID: ${slot.filamentId}` : ''}
-                            </span>
+                            <div className="printer-slot-meta">
+                              <span>{slot.filamentType || 'Unknown material'}{slot.colorHex ? ` · ${slot.colorHex}` : ''}{slot.isEmpty ? ' · Empty' : ''}</span>
+                              <div className="printer-slot-identifiers">
+                                <span>
+                                  <span>RFID / Tag UID</span>
+                                  {slot.tagUid ? <code>{slot.tagUid}</code> : <em>Not reported</em>}
+                                </span>
+                                {slot.trayUuid && !/^0+$/.test(slot.trayUuid.replace(/-/g, '')) && (
+                                  <span><span>Tray UUID</span><code>{slot.trayUuid}</code></span>
+                                )}
+                                <span>
+                                  <span>Filament ID</span>
+                                  {slot.filamentId ? <code>{slot.filamentId}</code> : <em>Not reported</em>}
+                                </span>
+                              </div>
+                            </div>
                           </div>
                           <SpoolSelect
                             value={slot.spoolId ?? null}
@@ -344,7 +352,23 @@ export default function PrintersPage() {
                             placeholder="Assign spool"
                             size="sm"
                             aria-label={`Assign spool to ${slot.slotLabel}`}
+                            dropdownAction={canImprintSlotIdentity(slot) ? {
+                              label: imprintingSlotId === slot.id ? 'Imprinting detected IDs…' : 'Imprint detected IDs on this spool',
+                              disabled: imprintingSlotId === slot.id,
+                              onSelect: () => void handleImprintSlotIdentity(printer, slot),
+                            } : undefined}
                           />
+                          {slotIdentityFeedback?.slotId === slot.id && (
+                            <div className={`printer-slot-imprint-result ${slotIdentityFeedback.error ? 'is-error' : 'is-success'}`} role="status">
+                              {slotIdentityFeedback.message}
+                            </div>
+                          )}
+                          {!slotIdentityFeedback && !slot.spoolId && (slot.tagUid || slot.filamentId) && (
+                            <div className="printer-slot-imprint-note">Choose a spool from the dropdown to link the detected IDs to it.</div>
+                          )}
+                          {!slotIdentityFeedback && slot.spoolId && hasSlotIdentityConflict(slot) && (
+                            <div className="printer-slot-imprint-note">The linked spool has a different ID saved. Verify it before changing the spool identity.</div>
+                          )}
                           {!slot.isEmpty && !slot.spoolId && (
                             <div className="printer-slot-warning">
                               Filament detected, no spool assigned
@@ -387,32 +411,9 @@ export default function PrintersPage() {
         </div>
       )}
 
-      {unregistered.length > 0 && (
-        <div className="printers-section">
-          <h3 className="section-title">Available to Register</h3>
-          <div className="printer-cards">
-            {unregistered.map((entity) => (
-              <div key={entity.deviceId} className="printer-card printer-card-discovered">
-                <div className="printer-card-icon">🔍</div>
-                <div className="printer-card-info">
-                  <span className="printer-card-name">{entity.deviceName}</span>
-                  <span className="printer-card-model">{entity.model || 'Bambu Lab'}</span>
-                  <span className="printer-card-entity">{entity.entities.length} entities</span>
-                </div>
-                <div className="printer-card-actions">
-                  <button className="btn btn-primary btn-sm" onClick={() => handleRegisterPrinter(entity)}>
-                    Register
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {printers.length === 0 && unregistered.length === 0 && (
+      {printers.length === 0 && (
         <div className="printers-empty">
-          <p>No printers yet. Use <strong>Discover Printers</strong> when HA is connected, or <strong>Add printer manually</strong> for dev or when HA is not available.</p>
+          <p>No printers yet. Add a printer record, then configure its direct LAN connection in the deployment environment.</p>
         </div>
       )}
 
@@ -429,11 +430,6 @@ export default function PrintersPage() {
           spools={spools}
           onSave={handleSaveEdit}
           onClose={() => setEditingPrinter(null)}
-          onDiscover={async () => {
-            const res = await haApi.getEntities();
-            return res.data;
-          }}
-          onFetchEntityStates={(ids) => haApi.getEntityStates(ids).then((r) => r.data)}
         />
       )}
 

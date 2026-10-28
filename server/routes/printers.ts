@@ -2,12 +2,10 @@ import { Router, Request, Response } from 'express';
 import { getPrismaClient } from '../database';
 import { LOG } from '../utils/logger';
 import type { PrinterCreateRequest, PrinterUpdateRequest } from '@ha-addon/types';
-import { publishAllSpooltrackerHASensors } from '../services/haSensors';
 import { assignActiveSpoolToPrinter, AssignSpoolError } from '../services/assignActiveSpool';
-import { syncPrinterSlotsFromHA, slotLabel } from '../services/printerSlots';
-import { updatePrinterDiscoveredEntities } from '../services/haDiscovery';
+import { getDirectPrinterStatus, syncDirectPrinterSlots } from '../services/directBambu';
+import { slotLabel } from '../services/printerSlots';
 import { readPrintWeightUsages } from '../services/multiSpoolDeduction';
-import { fetchHAEntityState } from '../services/haState';
 import { commitUndeductedUsageRows } from '../services/spoolUsageCommit';
 
 const logger = LOG('PRINTERS');
@@ -22,6 +20,7 @@ async function includeSlotSuggestions(prisma: NonNullable<ReturnType<typeof getP
   const spools = await prisma.spool.findMany({ where: { archivedAt: null } });
   return printers.map((printer) => ({
     ...printer,
+    directStatus: getDirectPrinterStatus(printer.id),
     slots: (printer.slots ?? []).map((slot: any) => {
       const suggestions = spools
         .map((spool) => {
@@ -138,7 +137,6 @@ router.put('/printers/:id', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'No valid fields to update' });
     }
 
-    await publishAllSpooltrackerHASensors();
     res.json(printer);
   } catch (error) {
     if (error instanceof AssignSpoolError) {
@@ -156,8 +154,12 @@ router.post('/printers/:id/sync-slots', async (req: Request, res: Response) => {
   try {
     const printer = await prisma.printer.findUnique({ where: { id: req.params.id as string } });
     if (!printer) return res.status(404).json({ error: 'Printer not found' });
-    const updatedPrinter = await updatePrinterDiscoveredEntities(prisma, printer);
-    const slots = await syncPrinterSlotsFromHA(prisma, updatedPrinter);
+    await syncDirectPrinterSlots(printer);
+    const slots = await prisma.printerSlot.findMany({
+      where: { printerId: printer.id },
+      orderBy: [{ sourceType: 'asc' }, { amsIndex: 'asc' }, { trayIndex: 'asc' }],
+      include: { spool: true },
+    });
     res.json(slots);
   } catch (error) {
     logger.error('Failed to sync printer slots:', error);
@@ -182,9 +184,8 @@ router.post('/printers/:id/recover-active-print', async (req: Request, res: Resp
     });
     if (!job) return res.status(404).json({ error: 'No active print job found' });
 
-    const weight = await readPrintWeightUsages(printer);
-    const progressRaw = await fetchHAEntityState(printer.entityPrintProgress ?? `sensor.${printer.entityPrefix}_print_progress`);
-    const progress = progressRaw == null ? job.progress : Number(String(progressRaw).replace('%', ''));
+    const [weight] = await Promise.all([readPrintWeightUsages(printer)]);
+    const progress = getDirectPrinterStatus(printer.id)?.progress ?? job.progress;
     const projected = weight.totalGrams != null && Number.isFinite(progress) ? weight.totalGrams * (Math.max(0, Math.min(100, Number(progress))) / 100) : null;
     const existingSum = await prisma.printJobSpoolUsage.aggregate({ where: { printJobId: job.id }, _sum: { gramsUsed: true } });
     const missing = projected == null ? 0 : projected - (existingSum._sum.gramsUsed ?? 0);
@@ -286,12 +287,17 @@ router.put('/printers/:printerId/slots/:slotId', async (req: Request, res: Respo
     const existing = await prisma.printerSlot.findFirst({ where: { id: slotId, printerId } });
     if (!existing) return res.status(404).json({ error: 'Printer slot not found' });
 
-    if (spoolId && existing.tagUid) {
+    if (spoolId && (existing.tagUid || existing.filamentId)) {
       const selectedSpool = await prisma.spool.findUnique({ where: { id: spoolId } });
-      if (selectedSpool?.tagUid && selectedSpool.tagUid !== existing.tagUid) {
+      if (existing.tagUid && selectedSpool?.tagUid && selectedSpool.tagUid !== existing.tagUid) {
         return res.status(400).json({ error: `Spool "${selectedSpool.name}" is already linked to a different RFID tag` });
       }
-      const tagOwner = await prisma.spool.findFirst({ where: { tagUid: existing.tagUid, id: { not: spoolId } } });
+      if (selectedSpool?.filamentId && existing.filamentId && selectedSpool.filamentId !== existing.filamentId) {
+        return res.status(400).json({ error: `Spool "${selectedSpool.name}" is already linked to a different filament ID` });
+      }
+      const tagOwner = existing.tagUid
+        ? await prisma.spool.findFirst({ where: { tagUid: existing.tagUid, id: { not: spoolId } } })
+        : null;
       if (tagOwner && !tagOwner.isRfidTemporary) {
         return res.status(400).json({ error: `RFID tag is already linked to spool "${tagOwner.name}"` });
       }
@@ -312,7 +318,7 @@ router.put('/printers/:printerId/slots/:slotId', async (req: Request, res: Respo
         await tx.spool.update({
           where: { id: spoolId },
           data: {
-            tagUid: existing.tagUid,
+            tagUid: existing.tagUid ?? undefined,
             filamentId: existing.filamentId ?? undefined,
             isRfidTemporary: false,
           },
@@ -325,7 +331,6 @@ router.put('/printers/:printerId/slots/:slotId', async (req: Request, res: Respo
       data: { ...(spoolId !== undefined ? { spoolId } : {}) },
       include: { spool: true },
     });
-    await publishAllSpooltrackerHASensors();
     res.json(slot);
   } catch (error) {
     logger.error('Failed to update printer slot:', error);
