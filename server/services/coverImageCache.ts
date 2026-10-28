@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { createHash } from 'node:crypto';
 import { LOG } from '../utils/logger';
 import { getHABaseUrl } from '../utils/haUrl';
 
@@ -71,11 +72,16 @@ export function cacheCoverImageBuffer(jobId: string, buffer: Buffer): string | n
     const cacheDir = getCacheDir();
     fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(path.join(cacheDir, `cover-${jobId}.png`), buffer);
-    return `/print-jobs/${jobId}/cover`;
+    return getCoverImageReference(jobId, buffer);
   } catch (err) {
     logger.warn('Failed to cache printer cover image:', err);
     return null;
   }
+}
+
+export function getCoverImageReference(jobId: string, buffer: Buffer): string {
+  const revision = createHash('sha256').update(buffer).digest('hex').slice(0, 12);
+  return `/print-jobs/${jobId}/cover?v=${revision}`;
 }
 
 /**

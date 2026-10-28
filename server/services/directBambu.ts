@@ -6,7 +6,7 @@ import { unzipSync } from 'fflate';
 import { getPrismaClient } from '../database';
 import type { Printer } from '../generated/prisma/client';
 import { LOG } from '../utils/logger';
-import { cacheCoverImageBuffer } from './coverImageCache';
+import { cacheCoverImageBuffer, getCoverImageReference } from './coverImageCache';
 import { applyMultiSpoolDeduction } from './multiSpoolDeduction';
 import { slotLabel, upsertPrinterSlotFromDirect } from './printerSlots';
 
@@ -207,12 +207,15 @@ async function processReport(printer: Printer, print: Record<string, unknown>): 
       job = await prisma.printJob.create({ data: { printerId: printer.id, spoolId: activeSlot?.spoolId ?? printer.activeSpoolId, projectName: name, status: 'in_progress', progress: status.progress ?? undefined, filamentUsed: status.filamentGrams ?? undefined } });
       logger.info(`Direct printer reports print started: ${name}`);
     }
-    if (job && !job.projectImage && metadataCoverImage) {
-      const projectImage = cacheCoverImageBuffer(job.id, metadataCoverImage);
-      if (projectImage) {
-        await prisma.printJob.update({ where: { id: job.id }, data: { projectImage } });
-        job.projectImage = projectImage;
-        logger.info(`Cached active printer model preview for ${name}`);
+    if (job && metadataCoverImage) {
+      const projectImage = getCoverImageReference(job.id, metadataCoverImage);
+      if (job.projectImage !== projectImage) {
+        const cachedProjectImage = cacheCoverImageBuffer(job.id, metadataCoverImage);
+        if (cachedProjectImage === projectImage) {
+          await prisma.printJob.update({ where: { id: job.id }, data: { projectImage } });
+          job.projectImage = projectImage;
+          logger.info(`Cached active printer model preview for ${name}`);
+        }
       }
     }
     if (job) await persistProjectedUsage(prisma, printer, job.id, status.progress ?? 0);
@@ -415,9 +418,14 @@ async function readMetadata(print: Record<string, unknown>): Promise<void> {
       ftp.close();
     }
     const zip = unzipSync(bytes);
+    const slicedPlateNumbers = Object.keys(zip)
+      .map((entry) => entry.match(/^Metadata\/plate_(\d+)\.gcode$/)?.[1])
+      .filter((plate): plate is string => plate != null);
+    const slicedPlate = slicedPlateNumbers.length === 1 ? slicedPlateNumbers[0] : null;
     const thumbnailPaths = [
-      'Metadata/plate_1.png',
+      ...(slicedPlate ? [`Metadata/plate_${slicedPlate}.png`, `Metadata/plate_${slicedPlate}_small.png`] : []),
       'Metadata/bbl_thumbnail.png',
+      'Metadata/plate_1.png',
       'Auxiliaries/.thumbnails/thumbnail_middle.png',
       'Auxiliaries/.thumbnails/thumbnail_3mf.png',
       'Auxiliaries/.thumbnails/thumbnail_small.png',
