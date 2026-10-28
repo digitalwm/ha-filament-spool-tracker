@@ -106,7 +106,7 @@ export async function startDirectBambuIntegration(): Promise<void> {
         remainingMinutes: nextStatus.remainingMinutes ?? status.remainingMinutes,
         model: nextStatus.model ?? status.model,
         filename: nextStatus.filename ?? status.filename,
-        activeSlot: nextStatus.activeSlot ?? status.activeSlot,
+        activeSlot: nextStatus.activeSlot ?? (readActiveTrayIndex(latestPrint) === 255 ? null : status.activeSlot),
         connected: true,
         updatedAt: new Date().toISOString(),
       };
@@ -158,7 +158,7 @@ function num(value: unknown): number | null {
 function statusFromPrint(print: Record<string, unknown>): DirectPrinterStatus {
   const ams = print.ams as Record<string, unknown> | undefined;
   const activeRaw = readActiveTrayIndex(print);
-  const ext = activeRaw === 254 || activeRaw === 255;
+  const ext = activeRaw === 254;
   const model = stringValue(print.subtask_name) ?? stringValue(print.gcode_file);
   const filename = stringValue(print.gcode_file);
   return {
@@ -168,7 +168,7 @@ function statusFromPrint(print: Record<string, unknown>): DirectPrinterStatus {
     remainingMinutes: num(print.mc_remaining_time),
     model: model?.replace(/\.gcode\.3mf$/i, '').replace(/\.3mf$/i, '') ?? null,
     filename,
-    activeSlot: activeRaw == null ? null : {
+    activeSlot: activeRaw == null || activeRaw === 255 ? null : {
       sourceType: ext ? 'external' : 'ams', amsIndex: ext ? -1 : 0, trayIndex: ext ? 0 : activeRaw,
     },
     filamentGrams: status.filamentGrams,
@@ -347,7 +347,7 @@ async function updateSlots(printer: Printer, print: Record<string, unknown>): Pr
       colorHex: stringValue(item.tray.tray_color), trayWeight: num(item.tray.tray_weight), remainPercent: num(item.tray.remain),
     });
   }
-  if (activeIndex === 254 || activeIndex === 255) {
+  if (activeIndex === 254) {
     await upsertPrinterSlotFromDirect(prisma, printer, { sourceType: 'external', amsIndex: -1, trayIndex: 0, active: true, empty: false, filamentType: 'External' });
   }
 }
@@ -360,7 +360,17 @@ async function updateSlots(printer: Printer, print: Record<string, unknown>): Pr
  */
 function readActiveTrayIndex(print: Record<string, unknown>): number | null {
   const ams = print.ams as Record<string, unknown> | undefined;
-  return num(ams?.tray_now) ?? num(print.tray_now);
+  const nested = num(ams?.tray_now);
+  const root = num(print.tray_now);
+  const reported = [nested, root];
+
+  // A valid AMS tray index is stronger evidence than a conflicting sentinel
+  // from the other report field. A1 reports 254 for external and 255 for none.
+  const amsTray = reported.find((value) => value != null && value >= 0 && value <= 253);
+  if (amsTray != null) return amsTray;
+  if (reported.includes(254)) return 254;
+  if (reported.includes(255)) return 255;
+  return null;
 }
 
 async function readMetadata(print: Record<string, unknown>): Promise<void> {
