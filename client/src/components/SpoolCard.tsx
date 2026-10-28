@@ -10,12 +10,14 @@ interface SpoolCardProps {
   onEdit: (spool: Spool) => void;
   onDeduct: (spool: Spool) => void;
   onArchive: (spool: Spool) => void;
+  onDeactivate: (spool: Spool) => void;
   onDelete: (spool: Spool) => void;
   onActivate: (spool: Spool) => void;
+  onReviewRfid?: (spool: Spool) => void;
   onNameClick?: (spool: Spool) => void;
 }
 
-export default function SpoolCard({ spool, onEdit, onDeduct, onArchive, onDelete, onActivate, onNameClick }: SpoolCardProps) {
+export default function SpoolCard({ spool, onEdit, onDeduct, onArchive, onDeactivate, onDelete, onActivate, onReviewRfid, onNameClick }: SpoolCardProps) {
   const displayRemaining = spool.liveRemainingWeight ?? spool.remainingWeight;
   const isLow = displayRemaining <= 100;
   const isActive = spool.isActive || !!spool.loadedOnPrinter;
@@ -50,9 +52,14 @@ export default function SpoolCard({ spool, onEdit, onDeduct, onArchive, onDelete
           <SpoolMetaBadges filamentType={spool.filamentType} colorStyle={spool.colorStyle} />
         </div>
         {spool.isRfidTemporary ? (
-          <span className="spool-review-badge" title={spool.tagUid ? `RFID ${spool.tagUid}` : 'Unknown RFID spool'}>
+          <button
+            type="button"
+            className="spool-review-badge"
+            title={spool.tagUid ? `Match RFID ${spool.tagUid} to an existing spool` : 'Review unknown RFID spool'}
+            onClick={() => onReviewRfid?.(spool)}
+          >
             Review RFID
-          </span>
+          </button>
         ) : archivedAtDisplay ? (
           <span className="spool-archived-badge" title={`Archived ${archivedAtDisplay}`}>
             {archivedAtDisplay}
@@ -80,6 +87,13 @@ export default function SpoolCard({ spool, onEdit, onDeduct, onArchive, onDelete
         {spool.manufacturer && (
           <span className="spool-manufacturer">{spool.manufacturer}</span>
         )}
+        {(spool.tagUid || spool.filamentId) && (
+          <span className="spool-identity">
+            {spool.tagUid && <>Tag ID: <code>{spool.tagUid}</code></>}
+            {spool.tagUid && spool.filamentId && ' · '}
+            {spool.filamentId && <>Filament ID: <code>{spool.filamentId}</code></>}
+          </span>
+        )}
       </div>
 
       <div className="spool-card-actions">
@@ -95,6 +109,11 @@ export default function SpoolCard({ spool, onEdit, onDeduct, onArchive, onDelete
           <button type="button" className="btn btn-secondary btn-sm btn-icon" onClick={() => onActivate(spool)} title="Activate (mark as in use)" aria-label="Activate">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
             <span className="btn-icon-label">Activate</span>
+          </button>
+        ) : !spool.loadedOnPrinter ? (
+          <button type="button" className="btn btn-secondary btn-sm btn-icon" onClick={() => onDeactivate(spool)} title="Mark as inactive" aria-label="Mark as inactive">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
+            <span className="btn-icon-label">Deactivate</span>
           </button>
         ) : (
           <button type="button" className="btn btn-secondary btn-sm btn-icon" onClick={() => onArchive(spool)} title="Archive spool" aria-label="Archive">

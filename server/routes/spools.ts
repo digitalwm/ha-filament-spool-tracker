@@ -207,6 +207,69 @@ router.put('/spools/:id', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/spools/:id/match-rfid', async (req: Request, res: Response) => {
+  const prisma = getPrismaClient();
+  if (!prisma) return res.status(503).json({ error: 'Database not available' });
+
+  try {
+    const temporarySpoolId = req.params.id as string;
+    const targetSpoolId = typeof req.body?.targetSpoolId === 'string' ? req.body.targetSpoolId : '';
+    if (!targetSpoolId || targetSpoolId === temporarySpoolId) {
+      return res.status(400).json({ error: 'Select a different existing spool' });
+    }
+
+    const [temporarySpool, targetSpool] = await Promise.all([
+      prisma.spool.findUnique({ where: { id: temporarySpoolId } }),
+      prisma.spool.findUnique({ where: { id: targetSpoolId } }),
+    ]);
+    if (!temporarySpool) return res.status(404).json({ error: 'RFID spool not found' });
+    if (!temporarySpool.isRfidTemporary || !temporarySpool.tagUid) {
+      return res.status(400).json({ error: 'This spool is not awaiting RFID review' });
+    }
+    if (!targetSpool) return res.status(404).json({ error: 'Existing spool not found' });
+    if (targetSpool.archivedAt) return res.status(400).json({ error: 'Existing spool is archived' });
+    if (targetSpool.isRfidTemporary) return res.status(400).json({ error: 'Select a validated spool' });
+    if (targetSpool.tagUid) return res.status(400).json({ error: `Spool "${targetSpool.name}" already has an RFID tag` });
+
+    const matched = await prisma.$transaction(async (tx) => {
+      await tx.spool.update({
+        where: { id: temporarySpoolId },
+        data: {
+          tagUid: null,
+          filamentId: null,
+          isActive: false,
+          archivedAt: new Date(),
+          notes: `${temporarySpool.notes ?? ''}\nRFID tag was matched to "${targetSpool.name}".`.trim(),
+        },
+      });
+      const updatedTarget = await tx.spool.update({
+        where: { id: targetSpoolId },
+        data: {
+          tagUid: temporarySpool.tagUid,
+          filamentId: temporarySpool.filamentId ?? targetSpool.filamentId,
+          isRfidTemporary: false,
+        },
+      });
+      await tx.printerSlot.updateMany({
+        where: {
+          OR: [
+            { spoolId: temporarySpoolId },
+            { tagUid: temporarySpool.tagUid },
+          ],
+        },
+        data: { spoolId: targetSpoolId },
+      });
+      return updatedTarget;
+    });
+
+    await publishAllSpooltrackerHASensors();
+    res.json(matched);
+  } catch (error) {
+    logger.error('Failed to match RFID spool:', error);
+    res.status(500).json({ error: 'Failed to match RFID spool' });
+  }
+});
+
 router.delete('/spools/:id', async (req: Request, res: Response) => {
   const prisma = getPrismaClient();
   if (!prisma) return res.status(503).json({ error: 'Database not available' });
@@ -262,6 +325,23 @@ router.post('/spools/:id/archive', async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('Failed to archive spool:', error);
     res.status(500).json({ error: 'Failed to archive spool' });
+  }
+});
+
+router.post('/spools/:id/deactivate', async (req: Request, res: Response) => {
+  const prisma = getPrismaClient();
+  if (!prisma) return res.status(503).json({ error: 'Database not available' });
+
+  try {
+    const id = req.params.id as string;
+    const loaded = await prisma.printer.findFirst({ where: { activeSpoolId: id }, select: { id: true } });
+    if (loaded) return res.status(409).json({ error: 'Remove this spool from its printer before deactivating it' });
+    const spool = await prisma.spool.update({ where: { id }, data: { isActive: false } });
+    await publishAllSpooltrackerHASensors();
+    res.json(spool);
+  } catch (error) {
+    logger.error('Failed to deactivate spool:', error);
+    res.status(500).json({ error: 'Failed to deactivate spool' });
   }
 });
 

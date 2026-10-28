@@ -69,9 +69,12 @@ export const spoolsApi = {
   undoAudit: (spoolId: string, logId: string) => api.post<Spool>(`/spools/${spoolId}/audit/${logId}/undo`),
   create: (data: SpoolCreateRequest) => api.post<Spool>('/spools', data),
   update: (id: string, data: SpoolUpdateRequest) => api.put<Spool>(`/spools/${id}`, data),
+  matchRfid: (id: string, targetSpoolId: string) =>
+    api.post<Spool>(`/spools/${id}/match-rfid`, { targetSpoolId }),
   delete: (id: string) => api.delete(`/spools/${id}`),
   deduct: (id: string, data: DeductionRequest) => api.post<Spool>(`/spools/${id}/deduct`, data),
   archive: (id: string) => api.post<Spool>(`/spools/${id}/archive`),
+  deactivate: (id: string) => api.post<Spool>(`/spools/${id}/deactivate`),
   activate: (id: string, data?: { printerId?: string | null }) =>
     api.post<Spool>(`/spools/${id}/activate`, data ?? {}),
 };

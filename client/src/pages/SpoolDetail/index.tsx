@@ -10,6 +10,7 @@ import { formatMoney, formatPricePerKg, pricePerGram, remainingValue, usedValue 
 import AddEditSpoolModal from '@modals/AddEditSpoolModal';
 import DeductFilamentModal from '@modals/DeductFilamentModal';
 import ConfirmModal from '@modals/ConfirmModal';
+import MatchRfidSpoolModal from '@modals/MatchRfidSpoolModal';
 import './index.css';
 
 export default function SpoolDetailPage() {
@@ -25,6 +26,8 @@ export default function SpoolDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeductModal, setShowDeductModal] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const [showRfidMatchModal, setShowRfidMatchModal] = useState(false);
+  const [matchCandidates, setMatchCandidates] = useState<Spool[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -119,6 +122,23 @@ export default function SpoolDetailPage() {
     }
   };
 
+  const openRfidMatch = async () => {
+    try {
+      const response = await spoolsApi.getAll();
+      setMatchCandidates(response.data);
+      setShowRfidMatchModal(true);
+    } catch (err) {
+      console.error('Failed to load RFID match candidates:', err);
+    }
+  };
+
+  const handleMatchRfid = async (targetSpoolId: string) => {
+    if (!spool) return;
+    const matched = await spoolsApi.matchRfid(spool.id, targetSpoolId);
+    setShowRfidMatchModal(false);
+    navigate(`/spools/${matched.data.id}`);
+  };
+
   const displayRemaining = spool.liveRemainingWeight ?? spool.remainingWeight;
   const remainingPercent = spool.initialWeight > 0 ? Math.max(0, Math.min(100, (displayRemaining / spool.initialWeight) * 100)) : 0;
   const isActive = spool.isActive || !!spool.loadedOnPrinter;
@@ -153,9 +173,14 @@ export default function SpoolDetailPage() {
           <div className="spool-detail-title-row">
             <h1 className="spool-detail-name">{spool.name}</h1>
             {spool.isRfidTemporary ? (
-              <span className="spool-detail-review-badge" title={spool.tagUid ? `RFID ${spool.tagUid}` : 'Unknown RFID spool'}>
+              <button
+                type="button"
+                className="spool-detail-review-badge"
+                title={spool.tagUid ? `Match RFID ${spool.tagUid} to an existing spool` : 'Review unknown RFID spool'}
+                onClick={() => void openRfidMatch()}
+              >
                 Review RFID
-              </span>
+              </button>
             ) : spool.archivedAt ? (
               <span className="spool-detail-archived-badge">Archived</span>
             ) : isActive ? (
@@ -333,6 +358,15 @@ export default function SpoolDetailPage() {
           spool={spool}
           onSave={handleSaveEdit}
           onCancel={() => setShowEditModal(false)}
+        />
+      )}
+
+      {showRfidMatchModal && spool && (
+        <MatchRfidSpoolModal
+          temporarySpool={spool}
+          spools={matchCandidates}
+          onConfirm={handleMatchRfid}
+          onCancel={() => setShowRfidMatchModal(false)}
         />
       )}
 

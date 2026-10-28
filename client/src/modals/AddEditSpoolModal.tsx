@@ -104,6 +104,9 @@ export default function AddEditSpoolModal({
   const [purchaseDate, setPurchaseDate] = useState(spool?.purchaseDate?.split('T')[0] ?? '');
   const [expirationDate, setExpirationDate] = useState(spool?.expirationDate?.split('T')[0] ?? '');
   const [notes, setNotes] = useState(spool?.notes ?? '');
+  const [tagUid, setTagUid] = useState(spool?.tagUid ?? '');
+  const [filamentId, setFilamentId] = useState(spool?.filamentId ?? '');
+  const isEditing = !!spool;
 
   const getColorHex = () => PRESET_COLORS.find((c) => c.name === selectedColor)?.hex ?? '#ffffff';
 
@@ -126,11 +129,10 @@ export default function AddEditSpoolModal({
       diameter: parseFloat(diameter),
       purchaseDate: purchaseDate || undefined,
       expirationDate: expirationDate || undefined,
+      ...(isEditing ? { tagUid: tagUid.trim() || null, filamentId: filamentId.trim() || null } : {}),
       notes: notes || undefined,
     });
   };
-
-  const isEditing = !!spool;
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
@@ -263,6 +265,22 @@ export default function AddEditSpoolModal({
               <input type="number" value={diameter} onChange={(e) => setDiameter(e.target.value)} min="1" step="0.01" />
             </div>
           </div>
+
+          {isEditing && (
+            <section className="spool-id-editor" aria-label="Spool identification IDs">
+              <strong className="spool-id-warning">Warning: Changing these IDs can desync spool tracking from your printer. Only edit them if you have verified the exact values.</strong>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>RFID tag ID</label>
+                  <input type="text" value={tagUid} onChange={(e) => setTagUid(e.target.value)} placeholder="Scanned tag UID" autoComplete="off" />
+                </div>
+                <div className="form-group">
+                  <label>Filament ID</label>
+                  <input type="text" value={filamentId} onChange={(e) => setFilamentId(e.target.value)} placeholder="Printer reported filament ID" autoComplete="off" />
+                </div>
+              </div>
+            </section>
+          )}
 
           <div className="form-row">
             <div className="form-group">

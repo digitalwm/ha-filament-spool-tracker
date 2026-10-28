@@ -79,12 +79,14 @@ async function resolveSpoolIdForSlot(
   identity: SlotIdentity,
   data: Prisma.PrinterSlotUncheckedCreateInput,
 ): Promise<string | null> {
-  if (data.isEmpty || !data.tagUid) return null;
+  if (data.isEmpty || (!data.tagUid && !data.filamentId)) return null;
 
   const existingSlot = await prisma.printerSlot.findUnique({ where: stableSlotWhere(printerId, identity), include: { spool: true } });
   if (existingSlot?.spoolId && existingSlot.spool && !existingSlot.spool.isRfidTemporary) {
-    if (existingSlot.spool.tagUid && existingSlot.spool.tagUid !== data.tagUid) {
-      logger.info(`RFID tag changed in ${identity.slotLabel}; resolving spool by reported tag instead of previous assignment`);
+    const tagConflict = Boolean(existingSlot.spool.tagUid && data.tagUid && existingSlot.spool.tagUid !== data.tagUid);
+    const filamentConflict = Boolean(existingSlot.spool.filamentId && data.filamentId && existingSlot.spool.filamentId !== data.filamentId);
+    if (tagConflict || filamentConflict) {
+      logger.info(`Printer-reported spool ID changed in ${identity.slotLabel}; resolving spool by reported identity instead of previous assignment`);
     } else {
       try {
         await prisma.spool.update({
@@ -101,8 +103,24 @@ async function resolveSpoolIdForSlot(
     }
   }
 
-  const known = await prisma.spool.findFirst({ where: { tagUid: data.tagUid, archivedAt: null } });
-  if (known) return known.id;
+  if (data.tagUid) {
+    const knownByTag = await prisma.spool.findFirst({ where: { tagUid: data.tagUid, archivedAt: null } });
+    if (knownByTag) return knownByTag.id;
+  }
+
+  // Some integrations report a filament ID without a tag UID. Only auto-link
+  // when that ID identifies exactly one validated, non-archived spool.
+  if (data.filamentId) {
+    const knownByFilamentId = await prisma.spool.findMany({
+      where: { filamentId: data.filamentId, archivedAt: null, isRfidTemporary: false },
+      select: { id: true },
+      take: 2,
+    });
+    if (knownByFilamentId.length === 1) return knownByFilamentId[0].id;
+    if (knownByFilamentId.length > 1) {
+      logger.warn(`Filament ID reported by ${identity.slotLabel} matches multiple spools; leaving slot unassigned`);
+    }
+  }
 
   const created = await prisma.spool.create({
     data: {

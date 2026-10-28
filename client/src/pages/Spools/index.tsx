@@ -9,6 +9,7 @@ import AddEditSpoolModal from '@modals/AddEditSpoolModal';
 import ActivateSpoolPrinterModal from '@modals/ActivateSpoolPrinterModal';
 import DeductFilamentModal from '@modals/DeductFilamentModal';
 import ConfirmModal from '@modals/ConfirmModal';
+import MatchRfidSpoolModal from '@modals/MatchRfidSpoolModal';
 import './index.css';
 
 type SpoolFilter = 'all' | 'active' | 'archived' | 'low';
@@ -28,6 +29,8 @@ export default function SpoolsPage() {
   const [deductingSpool, setDeductingSpool] = useState<Spool | null>(null);
   const [deletingSpool, setDeletingSpool] = useState<Spool | null>(null);
   const [activatePrinterModal, setActivatePrinterModal] = useState<{ spool: Spool; printers: Printer[] } | null>(null);
+  const [reviewingRfidSpool, setReviewingRfidSpool] = useState<Spool | null>(null);
+  const [rfidMatchCandidates, setRfidMatchCandidates] = useState<Spool[]>([]);
   const [defaultNewSpoolWeightGrams, setDefaultNewSpoolWeightGrams] = useState(DEFAULT_NEW_SPOOL_WEIGHT_GRAMS);
 
   useEffect(() => {
@@ -128,6 +131,15 @@ export default function SpoolsPage() {
     }
   };
 
+  const handleDeactivate = async (spool: Spool) => {
+    try {
+      await spoolsApi.deactivate(spool.id);
+      fetchSpools();
+    } catch (err) {
+      console.error('Failed to deactivate spool:', err);
+    }
+  };
+
   const handleActivate = async (spool: Spool) => {
     try {
       const printersRes = await printersApi.getAll();
@@ -155,6 +167,23 @@ export default function SpoolsPage() {
       fetchSpools();
     } catch (err) {
       console.error('Failed to activate spool:', err);
+    }
+  };
+
+  const handleMatchRfid = async (targetSpoolId: string) => {
+    if (!reviewingRfidSpool) return;
+    await spoolsApi.matchRfid(reviewingRfidSpool.id, targetSpoolId);
+    setReviewingRfidSpool(null);
+    await fetchSpools();
+  };
+
+  const openRfidReview = async (spool: Spool) => {
+    try {
+      const response = await spoolsApi.getAll();
+      setRfidMatchCandidates(response.data);
+      setReviewingRfidSpool(spool);
+    } catch (err) {
+      console.error('Failed to load RFID match candidates:', err);
     }
   };
 
@@ -227,8 +256,10 @@ export default function SpoolsPage() {
               onEdit={(s) => setEditingSpool(s)}
               onDeduct={(s) => setDeductingSpool(s)}
               onArchive={handleArchive}
+              onDeactivate={handleDeactivate}
               onDelete={(s) => setDeletingSpool(s)}
               onActivate={handleActivate}
+              onReviewRfid={(spool) => void openRfidReview(spool)}
               onNameClick={(s) => navigate(`/spools/${s.id}`)}
             />
           ))}
@@ -241,6 +272,15 @@ export default function SpoolsPage() {
           printers={activatePrinterModal.printers}
           onConfirm={(printerId) => void finishActivateWithPrinter(printerId)}
           onCancel={() => setActivatePrinterModal(null)}
+        />
+      )}
+
+      {reviewingRfidSpool && (
+        <MatchRfidSpoolModal
+          temporarySpool={reviewingRfidSpool}
+          spools={rfidMatchCandidates}
+          onConfirm={handleMatchRfid}
+          onCancel={() => setReviewingRfidSpool(null)}
         />
       )}
 

@@ -333,6 +333,8 @@ export default function PrintersPage() {
                               {slot.filamentType || 'Unknown'}
                               {slot.colorHex ? ` · ${slot.colorHex}` : ''}
                               {slot.isEmpty ? ' · empty' : ''}
+                              {slot.tagUid ? ` · Tag ID: ${slot.tagUid}` : ''}
+                              {slot.filamentId ? ` · Filament ID: ${slot.filamentId}` : ''}
                             </span>
                           </div>
                           <SpoolSelect
